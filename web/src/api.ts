@@ -7,7 +7,9 @@ export const setToken = (t: string | null) => {
 };
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json', ...(options.headers as any) };
+  const API_BASE = 'https://teli-api.onrender.com';
+
+const res = await fetch(`${API_BASE}/api${path}`, { 'Content-Type': 'application/json', ...(options.headers as any) };
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
   const res = await fetch(`/api${path}`, { ...options, headers });
