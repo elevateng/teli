@@ -7,16 +7,22 @@ export const setToken = (t: string | null) => {
 };
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const API_BASE = 'https://teli-api.onrender.com';
+const headers: Record<string, string> = {
+  'Content-Type': 'application/json',
+  ...(options.headers as any)
+};
 
-const res = await fetch(`${API_BASE}/api${path}`, { 'Content-Type': 'application/json', ...(options.headers as any) };
-  const token = getToken();
-  if (token) headers.Authorization = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  const text = await res.text();
-  const data = text ? JSON.parse(text) : {};
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
-  return data as T;
+const token = getToken();
+if (token) headers.Authorization = `Bearer ${token}`;
+
+const API_BASE = 'https://teli-api.onrender.com';
+
+const res = await fetch(`${API_BASE}/api${path}`, { ...options, headers });
+
+const text = await res.text();
+const data = text ? JSON.parse(text) : {};
+if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+return data as T;
 }
 
 export const api = {
