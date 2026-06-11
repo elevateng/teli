@@ -1,0 +1,233 @@
+import { DatabaseSync } from 'node:sqlite';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+import { mkdirSync } from 'node:fs';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const dataDir = join(__dirname, '..', 'data');
+mkdirSync(dataDir, { recursive: true });
+
+export const db = new DatabaseSync(join(dataDir, 'teli.db'));
+
+db.exec('PRAGMA journal_mode = WAL;');
+db.exec('PRAGMA foreign_keys = ON;');
+
+db.exec(`
+CREATE TABLE IF NOT EXISTS users (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  full_name    TEXT NOT NULL,
+  email        TEXT NOT NULL UNIQUE,
+  password     TEXT NOT NULL,
+  tagline      TEXT DEFAULT 'Making an impact through learning',
+  role         TEXT NOT NULL DEFAULT 'learner',  -- learner | admin | super_admin
+  points       INTEGER NOT NULL DEFAULT 0,
+  streak_days  INTEGER NOT NULL DEFAULT 0,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS courses (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  slug          TEXT NOT NULL UNIQUE,
+  title         TEXT NOT NULL,
+  category      TEXT NOT NULL,
+  provider      TEXT NOT NULL DEFAULT 'The Elevate Learning Institute',
+  level         TEXT NOT NULL DEFAULT 'Beginner',
+  duration      TEXT NOT NULL DEFAULT '6 weeks',
+  summary       TEXT NOT NULL,
+  description   TEXT NOT NULL,
+  price         INTEGER NOT NULL DEFAULT 0,
+  old_price     INTEGER,
+  discount      TEXT,
+  rating        REAL NOT NULL DEFAULT 4.8,
+  reviews_count INTEGER NOT NULL DEFAULT 0,
+  color         TEXT NOT NULL DEFAULT 'navy',
+  icon          TEXT NOT NULL DEFAULT 'target',
+  outcomes      TEXT NOT NULL DEFAULT '[]'
+);
+
+CREATE TABLE IF NOT EXISTS modules (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  course_id   INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  position    INTEGER NOT NULL,
+  title       TEXT NOT NULL,
+  subtitle    TEXT
+);
+
+CREATE TABLE IF NOT EXISTS lessons (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  module_id   INTEGER NOT NULL REFERENCES modules(id) ON DELETE CASCADE,
+  position    INTEGER NOT NULL,
+  title       TEXT NOT NULL,
+  kind        TEXT NOT NULL DEFAULT 'reading',  -- reading | video | activity | quiz
+  duration    TEXT NOT NULL DEFAULT '05:00',
+  body        TEXT NOT NULL DEFAULT '{}'        -- JSON payload (content, video, activity, quiz)
+);
+
+CREATE TABLE IF NOT EXISTS reviews (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  course_id   INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  author      TEXT NOT NULL,
+  rating      INTEGER NOT NULL,
+  body        TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (date('now'))
+);
+
+CREATE TABLE IF NOT EXISTS enrollments (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  course_id     INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  saved         INTEGER NOT NULL DEFAULT 0,
+  enrolled      INTEGER NOT NULL DEFAULT 0,
+  last_accessed TEXT,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(user_id, course_id)
+);
+
+CREATE TABLE IF NOT EXISTS lesson_progress (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  lesson_id   INTEGER NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+  completed   INTEGER NOT NULL DEFAULT 0,
+  completed_at TEXT,
+  UNIQUE(user_id, lesson_id)
+);
+
+CREATE TABLE IF NOT EXISTS quiz_attempts (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  lesson_id   INTEGER NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+  score       INTEGER NOT NULL,
+  total       INTEGER NOT NULL,
+  passed      INTEGER NOT NULL,
+  time_taken  TEXT,
+  answers     TEXT NOT NULL DEFAULT '[]',
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS certificates (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  course_id   INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  issued_at   TEXT NOT NULL DEFAULT (date('now')),
+  UNIQUE(user_id, course_id)
+);
+
+CREATE TABLE IF NOT EXISTS achievements (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  code        TEXT NOT NULL,
+  title       TEXT NOT NULL,
+  detail      TEXT NOT NULL,
+  icon        TEXT NOT NULL,
+  earned_at   TEXT NOT NULL DEFAULT (date('now')),
+  UNIQUE(user_id, code)
+);
+`);
+
+// ===================== additional feature tables =====================
+db.exec(`
+CREATE TABLE IF NOT EXISTS coupons (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  code        TEXT NOT NULL UNIQUE,
+  kind        TEXT NOT NULL DEFAULT 'percent',   -- percent | fixed
+  value       INTEGER NOT NULL,                  -- percent (0-100) or naira amount
+  course_id   INTEGER REFERENCES courses(id) ON DELETE CASCADE, -- NULL = any course
+  max_uses    INTEGER NOT NULL DEFAULT 1,
+  used_count  INTEGER NOT NULL DEFAULT 0,
+  single_use  INTEGER NOT NULL DEFAULT 1,
+  active      INTEGER NOT NULL DEFAULT 1,
+  expires_at  TEXT,
+  created_by  INTEGER REFERENCES users(id),
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS orders (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  reference   TEXT NOT NULL UNIQUE,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  course_id   INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  base_price  INTEGER NOT NULL,
+  discount    INTEGER NOT NULL DEFAULT 0,
+  amount      INTEGER NOT NULL,
+  coupon_code TEXT,
+  status      TEXT NOT NULL DEFAULT 'pending',   -- pending | paid | failed | free
+  provider    TEXT NOT NULL DEFAULT 'paystack',  -- paystack | sandbox | free
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  paid_at     TEXT
+);
+
+CREATE TABLE IF NOT EXISTS tickets (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  subject     TEXT NOT NULL,
+  category    TEXT NOT NULL DEFAULT 'General',
+  priority    TEXT NOT NULL DEFAULT 'normal',     -- low | normal | high
+  status      TEXT NOT NULL DEFAULT 'open',       -- open | pending | resolved | closed
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS ticket_messages (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  ticket_id   INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+  author_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  author_name TEXT NOT NULL,
+  author_role TEXT NOT NULL,
+  body        TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS audit_log (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  actor_id    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  actor_name  TEXT NOT NULL,
+  action      TEXT NOT NULL,
+  detail      TEXT NOT NULL DEFAULT '',
+  target_type TEXT,
+  target_id   INTEGER,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS password_resets (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token       TEXT NOT NULL,
+  expires_at  TEXT NOT NULL,
+  used        INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type        TEXT NOT NULL DEFAULT 'info',  -- info | success | payment | ticket | certificate | system
+  title       TEXT NOT NULL,
+  body        TEXT NOT NULL DEFAULT '',
+  link        TEXT,
+  read        INTEGER NOT NULL DEFAULT 0,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS referrals (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  code        TEXT NOT NULL UNIQUE,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+`);
+
+// ---- migrations for pre-existing databases ----
+function addColumn(table, col, ddl) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+  if (!cols.includes(col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl};`);
+}
+addColumn('users', 'role', `role TEXT NOT NULL DEFAULT 'learner'`);
+addColumn('users', 'google_id', `google_id TEXT`);
+addColumn('users', 'active', `active INTEGER NOT NULL DEFAULT 1`);
+addColumn('users', 'created_by', `created_by INTEGER`);
+// certificate auto-issue conditions (settable per course by admins)
+addColumn('courses', 'cert_min_progress', `cert_min_progress INTEGER NOT NULL DEFAULT 100`);
+addColumn('courses', 'cert_min_quiz_score', `cert_min_quiz_score INTEGER NOT NULL DEFAULT 0`);
+addColumn('courses', 'cert_require_quizzes', `cert_require_quizzes INTEGER NOT NULL DEFAULT 1`);
+addColumn('courses', 'published', `published INTEGER NOT NULL DEFAULT 1`);
+// per-lesson resources (JSON array of {name,url})
+addColumn('lessons', 'resources', `resources TEXT NOT NULL DEFAULT '[]'`);

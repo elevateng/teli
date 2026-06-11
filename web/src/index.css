@@ -1,0 +1,52 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  background: #e9ecf3;
+  color: #0F2147;
+}
+
+/* hide scrollbars inside the phone for a native feel */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+@layer components {
+  .card {
+    @apply bg-white rounded-2xl shadow-card border border-black/[0.04];
+  }
+  .btn-primary {
+    @apply bg-brand text-white font-bold rounded-2xl py-4 px-5 flex items-center justify-center gap-2 active:scale-[0.99] transition disabled:opacity-50;
+  }
+  .btn-navy {
+    @apply bg-navy text-white font-bold rounded-2xl py-4 px-5 flex items-center justify-center gap-2 active:scale-[0.99] transition;
+  }
+  .btn-outline {
+    @apply border-2 border-brand text-brand font-bold rounded-2xl py-4 px-5 flex items-center justify-center gap-2 active:scale-[0.99] transition;
+  }
+  .chip {
+    @apply text-xs font-semibold px-3 py-1.5 rounded-full;
+  }
+  .field {
+    @apply w-full rounded-2xl border border-black/10 bg-white px-4 py-4 text-[15px] outline-none focus:border-brand/60 focus:ring-2 focus:ring-brand/15;
+  }
+  .progress-track { @apply h-2 rounded-full bg-black/[0.07] overflow-hidden; }
+  .progress-fill  { @apply h-full rounded-full bg-brand transition-all; }
+}
+
+/* confetti */
+@keyframes pop { 0% { transform: scale(0.6); opacity: 0 } 60% { transform: scale(1.05) } 100% { transform: scale(1); opacity: 1 } }
+.pop { animation: pop .45s ease-out both; }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
+.fade-up { animation: fadeUp .35s ease-out both; }

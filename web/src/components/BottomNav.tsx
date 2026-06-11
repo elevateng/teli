@@ -1,0 +1,31 @@
+import { NavLink } from 'react-router-dom';
+import { Home, Compass, BookOpen, User } from 'lucide-react';
+
+const items = [
+  { to: '/home', label: 'Home', icon: Home },
+  { to: '/explore', label: 'Explore', icon: Compass },
+  { to: '/learning', label: 'My Learning', icon: BookOpen },
+  { to: '/profile', label: 'Profile', icon: User },
+];
+
+export default function BottomNav() {
+  return (
+    <nav className="shrink-0 bg-white border-t border-black/[0.06] px-2 pb-5 pt-2">
+      <div className="flex items-center justify-around">
+        {items.map(({ to, label, icon: Icon }) => (
+          <NavLink key={to} to={to}
+            className={({ isActive }) =>
+              `flex flex-col items-center gap-1 px-3 py-1 rounded-xl ${isActive ? 'text-brand' : 'text-sub'}`
+            }>
+            {({ isActive }) => (
+              <>
+                <Icon size={24} strokeWidth={isActive ? 2.6 : 2} fill={isActive ? 'currentColor' : 'none'} fillOpacity={isActive ? 0.12 : 0} />
+                <span className="text-[11px] font-semibold">{label}</span>
+              </>
+            )}
+          </NavLink>
+        ))}
+      </div>
+    </nav>
+  );
+}
