@@ -356,43 +356,33 @@ await course({
   { title: 'Building & Scaling', lessons: ['Testing Your Idea', 'Sustainable Models', 'Planning to Scale', 'Venture Quiz'], quiz: genericQuiz('social entrepreneurship') },
 ]), []);
 
-// ============================ Demo accounts ============================
-async function ensureUser({ name, email, password, tagline, points = 0, streak = 0, role = 'learner' }) {
+// ============================ Bootstrap admin (optional, env-driven) ============================
+// No demo accounts and no passwords are stored in the codebase. To auto-create a
+// super admin on a brand-new/empty database, set these on the server:
+//   SEED_ADMIN_EMAIL, SEED_ADMIN_PASSWORD, and optionally SEED_ADMIN_NAME.
+// On an existing database this does nothing (the account already exists), so it
+// never resets a password you've changed.
+async function ensureUser({ name, email, password, tagline = 'Platform owner', role = 'super_admin' }) {
   const existing = await db.prepare('SELECT id FROM users WHERE email = ?').get(email);
-  if (existing) {
-    await db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, existing.id);
-    return;
-  }
+  if (existing) return; // never touch an existing account's password/role
   const hash = bcrypt.hashSync(password, 10);
-  await db.prepare('INSERT INTO users (full_name,email,password,tagline,role,points,streak_days) VALUES (?,?,?,?,?,?,?)')
-    .run(name, email, hash, tagline, role, points, streak);
+  await db.prepare('INSERT INTO users (full_name,email,password,tagline,role,active) VALUES (?,?,?,?,?,1)')
+    .run(name, email, hash, tagline, role);
+  console.log('Created bootstrap super admin:', email);
 }
 
-await ensureUser({ name: 'Frances Okoro', email: 'frances@teli.africa', password: 'password123', tagline: 'Making an impact through learning', points: 1250, streak: 7, role: 'learner' });
-await ensureUser({ name: 'Tobi Adeyemi', email: 'admin@teli.africa', password: 'password123', tagline: 'Course administrator', role: 'admin' });
-await ensureUser({ name: 'Ada Nwosu', email: 'super@teli.africa', password: 'password123', tagline: 'Platform owner', role: 'super_admin' });
-
-// ============================ Sample coupons ============================
-const fundraising = await db.prepare("SELECT id FROM courses WHERE slug = 'fundraising-strategy-for-nonprofits'").get();
-const superUser = await db.prepare("SELECT id FROM users WHERE email = 'super@teli.africa'").get();
-async function ensureCoupon(code, kind, value, courseId, singleUse) {
-  if (await db.prepare('SELECT id FROM coupons WHERE code = ?').get(code)) return;
-  await db.prepare('INSERT INTO coupons (code,kind,value,course_id,max_uses,single_use,active,created_by) VALUES (?,?,?,?,?,?,1,?)')
-    .run(code, kind, value, courseId, singleUse ? 1 : 100, singleUse ? 1 : 0, superUser?.id || null);
+if (process.env.SEED_ADMIN_EMAIL && process.env.SEED_ADMIN_PASSWORD) {
+  await ensureUser({
+    name: process.env.SEED_ADMIN_NAME || 'Administrator',
+    email: String(process.env.SEED_ADMIN_EMAIL).toLowerCase(),
+    password: process.env.SEED_ADMIN_PASSWORD,
+  });
 }
-await ensureCoupon('WELCOME20', 'percent', 20, null, false);
-await ensureCoupon('LAUNCH5000', 'fixed', 5000, null, false);
-await ensureCoupon('FREEFUND', 'percent', 100, fundraising?.id, true);
 
 const counts = {
   courses: (await db.prepare('SELECT COUNT(*) c FROM courses').get()).c,
   modules: (await db.prepare('SELECT COUNT(*) c FROM modules').get()).c,
   lessons: (await db.prepare('SELECT COUNT(*) c FROM lessons').get()).c,
   users: (await db.prepare('SELECT COUNT(*) c FROM users').get()).c,
-  coupons: (await db.prepare('SELECT COUNT(*) c FROM coupons').get()).c,
 };
 console.log('Seed complete:', counts);
-console.log('Logins:');
-console.log('  learner     -> frances@teli.africa / password123');
-console.log('  admin       -> admin@teli.africa   / password123');
-console.log('  super_admin -> super@teli.africa   / password123');
