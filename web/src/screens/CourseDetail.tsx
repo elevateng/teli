@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ChevronLeft, Share2, Bookmark, Clock, SignalHigh, PlayCircle, Star, CheckCircle2,
-  ChevronDown, FileText, HelpCircle, Award, Play, Lock, ArrowRight, Circle,
+  ChevronDown, FileText, HelpCircle, Award, Play, Lock, ArrowRight, Circle, Users, Crown,
 } from 'lucide-react';
 import { api, CourseDetail as CD, LessonNode, naira, shareOrCopy } from '../api';
 import { CourseThumb, ProgressBar, Spinner, Wordmark, Avatar } from '../components/ui';
@@ -86,6 +86,24 @@ export default function CourseDetail() {
           </div>
           <ProgressBar value={course.progress} className="mt-2" />
           <p className="text-xs text-sub mt-2">{course.completedLessons} of {course.totalLessons} lessons completed</p>
+        </div>
+      )}
+
+      {course.enrolled && course.myGroup && (
+        <div className="mx-5 mt-3 card p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Users size={18} className="text-brand" />
+            <span className="font-bold text-navy">Your team · {course.myGroup.name}</span>
+          </div>
+          <div className="space-y-2.5">
+            {course.myGroup.members.map((m) => (
+              <div key={m.userId} className="flex items-center gap-2.5">
+                <Avatar name={m.name} src={m.avatar} size={34} />
+                <span className="text-sm font-semibold text-navy flex-1 truncate">{m.name}</span>
+                {m.leader && <span className="chip bg-amber-100 text-amber-700 inline-flex items-center gap-1"><Crown size={12} /> Group leader</span>}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

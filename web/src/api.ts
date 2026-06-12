@@ -89,6 +89,8 @@ export interface CourseCard {
   visibility?: 'public' | 'private'; published?: boolean;
 }
 export interface Instructor { name: string; title: string; bio: string; avatar: string | null; }
+export interface GroupMember { userId: number; name: string; avatar: string | null; leader: boolean; }
+export interface CourseGroup { id: number; name: string; courseId?: number; members: GroupMember[]; }
 
 export type LessonKind = 'reading' | 'video' | 'activity' | 'quiz';
 export interface LessonNode {
@@ -107,6 +109,7 @@ export interface CourseDetail extends Omit<CourseCard, 'progress'> {
   moduleCount: number; lessonCount: number; estimatedTime: string;
   modules: ModuleNode[]; reviews: Review[]; myReview: { rating: number; body: string } | null;
   instructor: Instructor; signatoryName: string; createdBy: number | null; tags: string[];
+  myGroup?: CourseGroup | null;
   lastAccessed: string | null; progress: number; completedLessons: number; totalLessons: number;
   published: boolean; visibility: 'public' | 'private'; cert: CertConditions;
 }

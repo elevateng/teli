@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Pencil, Trash2, X, Search, ListTree, Eye, EyeOff, Award, Ticket, Copy, Check, Power, Image as ImageIcon, Tag } from 'lucide-react';
-import { api, CourseCard, CourseDetail, AccessCode, resizeImage, naira } from '../../api';
+import { Plus, Pencil, Trash2, X, Search, ListTree, Eye, EyeOff, Award, Ticket, Copy, Check, Power, Image as ImageIcon, Tag, Users, Crown, UserPlus } from 'lucide-react';
+import { api, CourseCard, CourseDetail, AccessCode, CourseGroup, resizeImage, naira } from '../../api';
 import { StatusBar, CourseThumb, Spinner, Avatar } from '../../components/ui';
 
 const ICONS = ['target', 'megaphone', 'handshake', 'plant', 'doc', 'institution', 'shield', 'chart'];
@@ -14,6 +14,7 @@ export default function AdminCourses() {
   const [q, setQ] = useState('');
   const [editId, setEditId] = useState<number | 'new' | null>(null);
   const [codesFor, setCodesFor] = useState<CourseCard | null>(null);
+  const [groupsFor, setGroupsFor] = useState<CourseCard | null>(null);
 
   const load = () => api.get<{ courses: CourseCard[] }>('/courses').then((d) => setCourses(d.courses));
   useEffect(() => { load(); }, []);
@@ -68,6 +69,10 @@ export default function AdminCourses() {
                 className="flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-black/10 text-navy font-bold text-sm">
                 <Ticket size={16} /> Access codes
               </button>
+              <button onClick={() => setGroupsFor(c)}
+                className="flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-black/10 text-navy font-bold text-sm">
+                <Users size={16} /> Teams
+              </button>
             </div>
           </div>
         ))}
@@ -75,6 +80,7 @@ export default function AdminCourses() {
 
       {editId !== null && <CourseEditor id={editId} onClose={() => setEditId(null)} onSaved={() => { setEditId(null); load(); }} />}
       {codesFor && <AccessCodes course={codesFor} onClose={() => setCodesFor(null)} />}
+      {groupsFor && <GroupsManager course={groupsFor} onClose={() => setGroupsFor(null)} />}
     </div>
   );
 }
@@ -352,6 +358,89 @@ function AccessCodes({ course, onClose }: { course: CourseCard; onClose: () => v
             </div>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function GroupsManager({ course, onClose }: { course: CourseCard; onClose: () => void }) {
+  const [groups, setGroups] = useState<CourseGroup[] | null>(null);
+  const [learners, setLearners] = useState<{ id: number; name: string; avatar: string | null }[]>([]);
+  const [name, setName] = useState('');
+  const [pickFor, setPickFor] = useState<number | null>(null);
+
+  const load = () => api.get<{ groups: CourseGroup[] }>(`/admin/courses/${course.id}/groups`).then((d) => setGroups(d.groups));
+  useEffect(() => {
+    load();
+    api.get<{ learners: { id: number; name: string; avatar: string | null }[] }>(`/admin/courses/${course.id}/learners`).then((d) => setLearners(d.learners));
+  }, [course.id]);
+
+  const create = async () => { if (!name.trim()) return; await api.post(`/admin/courses/${course.id}/groups`, { name }); setName(''); load(); };
+  const delGroup = async (id: number) => { if (confirm('Delete this team?')) { await api.del(`/admin/groups/${id}`); load(); } };
+  const addMember = async (gid: number, userId: number) => { const { group } = await api.post<{ group: CourseGroup }>(`/admin/groups/${gid}/members`, { userId }); setGroups((g) => (g || []).map((x) => x.id === gid ? group : x)); setPickFor(null); };
+  const removeMember = async (gid: number, userId: number) => { const { group } = await api.del<{ group: CourseGroup }>(`/admin/groups/${gid}/members/${userId}`); setGroups((g) => (g || []).map((x) => x.id === gid ? group : x)); };
+  const toggleLeader = async (gid: number, userId: number, isLeader: boolean) => { const { group } = await api.post<{ group: CourseGroup }>(`/admin/groups/${gid}/leader`, { userId, isLeader }); setGroups((g) => (g || []).map((x) => x.id === gid ? group : x)); };
+
+  return (
+    <div className="absolute inset-0 bg-black/40 flex items-end z-50" onClick={onClose}>
+      <div className="bg-white w-full rounded-t-3xl max-h-[92%] overflow-y-auto no-scrollbar p-5 fade-up" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-xl font-extrabold text-navy">Teams</h2>
+          <button onClick={onClose} className="w-9 h-9 rounded-full bg-black/[0.05] flex items-center justify-center"><X size={18} /></button>
+        </div>
+        <p className="text-sm text-sub mb-4">{course.title} · group learners and nominate leaders.</p>
+
+        <div className="flex gap-2 mb-4">
+          <input className="field py-2.5 text-sm flex-1" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && create()} placeholder="New team name (e.g. Team A)" />
+          <button onClick={create} disabled={!name.trim()} className="btn-primary px-4 py-2 text-sm disabled:opacity-50"><Plus size={15} /> Add</button>
+        </div>
+
+        {!groups ? <Spinner /> : groups.length === 0 ? (
+          <p className="text-center text-sub py-8">No teams yet. Create one above.</p>
+        ) : (
+          <div className="space-y-3">
+            {groups.map((g) => {
+              const memberIds = new Set(g.members.map((m) => m.userId));
+              const available = learners.filter((l) => !memberIds.has(l.id));
+              return (
+                <div key={g.id} className="card p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-bold text-navy">{g.name}</span>
+                    <button onClick={() => delGroup(g.id)} className="text-red-500"><Trash2 size={15} /></button>
+                  </div>
+                  <div className="space-y-2">
+                    {g.members.length === 0 && <p className="text-xs text-sub">No members yet.</p>}
+                    {g.members.map((m) => (
+                      <div key={m.userId} className="flex items-center gap-2">
+                        <Avatar name={m.name} src={m.avatar} size={32} />
+                        <span className="text-sm font-semibold text-navy flex-1 truncate">{m.name}{m.leader && <span className="chip bg-amber-100 text-amber-700 ml-2 inline-flex items-center gap-1"><Crown size={11} /> Leader</span>}</span>
+                        <button onClick={() => toggleLeader(g.id, m.userId, !m.leader)} title={m.leader ? 'Remove leader' : 'Make leader'}
+                          className={`w-8 h-8 rounded-full flex items-center justify-center ${m.leader ? 'bg-amber-100 text-amber-600' : 'bg-black/[0.05] text-sub'}`}><Crown size={14} /></button>
+                        <button onClick={() => removeMember(g.id, m.userId)} className="w-8 h-8 rounded-full bg-black/[0.05] flex items-center justify-center text-sub"><X size={14} /></button>
+                      </div>
+                    ))}
+                  </div>
+                  {pickFor === g.id ? (
+                    <div className="mt-3 border-t border-black/5 pt-3">
+                      {available.length === 0 ? <p className="text-xs text-sub">All enrolled learners are already in a list.</p> : (
+                        <div className="max-h-44 overflow-y-auto space-y-1">
+                          {available.map((l) => (
+                            <button key={l.id} onClick={() => addMember(g.id, l.id)} className="w-full flex items-center gap-2 p-2 rounded-xl hover:bg-black/[0.04] text-left">
+                              <Avatar name={l.name} src={l.avatar} size={28} /><span className="text-sm text-navy flex-1 truncate">{l.name}</span><Plus size={15} className="text-brand" />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <button onClick={() => setPickFor(null)} className="text-sub text-sm font-semibold mt-2">Done</button>
+                    </div>
+                  ) : (
+                    <button onClick={() => setPickFor(g.id)} className="mt-3 text-brand font-bold text-sm flex items-center gap-1"><UserPlus size={15} /> Add member</button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

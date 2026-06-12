@@ -131,6 +131,24 @@ async function getCourseDetail(slugOrId, userId) {
   const reviews = await db.prepare('SELECT author,rating,body,created_at FROM reviews WHERE course_id = ? ORDER BY id DESC').all(course.id);
   const myReview = userId ? await db.prepare('SELECT rating, body FROM reviews WHERE course_id = ? AND user_id = ?').get(course.id, userId) : null;
 
+  // the learner's team group for this course (if any)
+  let myGroup = null;
+  if (userId) {
+    const gm = await db.prepare(`
+      SELECT cg.* FROM group_members m JOIN course_groups cg ON cg.id = m.group_id
+      WHERE m.user_id = ? AND cg.course_id = ? LIMIT 1
+    `).get(userId, course.id);
+    if (gm) {
+      const members = await db.prepare(`
+        SELECT gm.user_id, gm.is_leader, u.full_name, u.avatar
+        FROM group_members gm JOIN users u ON u.id = gm.user_id
+        WHERE gm.group_id = ? ORDER BY gm.is_leader DESC, u.full_name
+      `).all(gm.id);
+      myGroup = { id: gm.id, name: gm.name,
+        members: members.map((m) => ({ userId: m.user_id, name: m.full_name, avatar: m.avatar || null, leader: !!m.is_leader })) };
+    }
+  }
+
   return {
     id: course.id, slug: course.slug, title: course.title, category: course.category,
     provider: course.provider, level: course.level, duration: course.duration,
@@ -150,7 +168,7 @@ async function getCourseDetail(slugOrId, userId) {
     outcomes: JSON.parse(course.outcomes || '[]'),
     moduleCount: modules.length, lessonCount: totalLessons,
     estimatedTime: formatDuration(totalSeconds),
-    modules: moduleTree, reviews, myReview: myReview || null,
+    modules: moduleTree, reviews, myReview: myReview || null, myGroup,
     enrolled: !!enrollment?.enrolled, saved: !!enrollment?.saved,
     lastAccessed: enrollment?.last_accessed || null,
     progress, completedLessons, totalLessons,
@@ -723,6 +741,104 @@ app.post('/api/admin/tags', authOptional, requireRole('admin', 'super_admin'), a
   await db.prepare('INSERT OR IGNORE INTO tags (label, created_by) VALUES (?,?)').run(label, req.user.id);
   const rows = await db.prepare('SELECT label FROM tags ORDER BY label').all();
   res.json({ tags: rows.map((r) => r.label) });
+}));
+
+// ----------------------------- team groups -----------------------------
+// Can this staff user manage (create groups/assignments for) this course?
+function canManageCourse(user, course) {
+  if (!user || !course) return false;
+  if (user.role === 'super_admin') return true;
+  if (user.role === 'admin' && (!course.created_by || course.created_by === user.id)) return true;
+  return false;
+}
+async function loadCourseOr404(idOrSlug) {
+  return db.prepare('SELECT * FROM courses WHERE id = ? OR slug = ?').get(idOrSlug, idOrSlug);
+}
+async function groupView(g) {
+  const members = await db.prepare(`
+    SELECT gm.user_id, gm.is_leader, u.full_name, u.avatar
+    FROM group_members gm JOIN users u ON u.id = gm.user_id
+    WHERE gm.group_id = ? ORDER BY gm.is_leader DESC, u.full_name
+  `).all(g.id);
+  return {
+    id: g.id, name: g.name, courseId: g.course_id,
+    members: members.map((m) => ({ userId: m.user_id, name: m.full_name, avatar: m.avatar || null, leader: !!m.is_leader })),
+  };
+}
+
+// enrolled learners for a course (member picker)
+app.get('/api/admin/courses/:id/learners', authOptional, requireRole('admin', 'super_admin'), ah(async (req, res) => {
+  const course = await loadCourseOr404(req.params.id);
+  if (!course) return res.status(404).json({ error: 'Course not found' });
+  if (!canManageCourse(req.user, course)) return res.status(403).json({ error: 'You can only manage your own courses' });
+  const rows = await db.prepare(`
+    SELECT u.id, u.full_name, u.avatar FROM enrollments e JOIN users u ON u.id = e.user_id
+    WHERE e.course_id = ? AND e.enrolled = 1 ORDER BY u.full_name
+  `).all(course.id);
+  res.json({ learners: rows.map((u) => ({ id: u.id, name: u.full_name, avatar: u.avatar || null })) });
+}));
+
+// list groups for a course
+app.get('/api/admin/courses/:id/groups', authOptional, requireRole('admin', 'super_admin'), ah(async (req, res) => {
+  const course = await loadCourseOr404(req.params.id);
+  if (!course) return res.status(404).json({ error: 'Course not found' });
+  if (!canManageCourse(req.user, course)) return res.status(403).json({ error: 'You can only manage your own courses' });
+  const rows = await db.prepare('SELECT * FROM course_groups WHERE course_id = ? ORDER BY id').all(course.id);
+  const groups = [];
+  for (const g of rows) groups.push(await groupView(g));
+  res.json({ groups });
+}));
+
+// create group
+app.post('/api/admin/courses/:id/groups', authOptional, requireRole('admin', 'super_admin'), ah(async (req, res) => {
+  const course = await loadCourseOr404(req.params.id);
+  if (!course) return res.status(404).json({ error: 'Course not found' });
+  if (!canManageCourse(req.user, course)) return res.status(403).json({ error: 'You can only manage your own courses' });
+  const name = String(req.body?.name || '').trim();
+  if (!name) return res.status(400).json({ error: 'Enter a group name' });
+  const r = await db.prepare('INSERT INTO course_groups (course_id, name, created_by) VALUES (?,?,?)').run(course.id, name, req.user.id);
+  const g = await db.prepare('SELECT * FROM course_groups WHERE id = ?').get(r.lastInsertRowid);
+  res.json({ group: await groupView(g) });
+}));
+
+// helper: load a group + its course, enforce permission
+async function groupGuard(req, res) {
+  const g = await db.prepare('SELECT * FROM course_groups WHERE id = ?').get(req.params.gid);
+  if (!g) { res.status(404).json({ error: 'Group not found' }); return null; }
+  const course = await db.prepare('SELECT * FROM courses WHERE id = ?').get(g.course_id);
+  if (!canManageCourse(req.user, course)) { res.status(403).json({ error: 'You can only manage your own courses' }); return null; }
+  return { g, course };
+}
+
+app.delete('/api/admin/groups/:gid', authOptional, requireRole('admin', 'super_admin'), ah(async (req, res) => {
+  const ctx = await groupGuard(req, res); if (!ctx) return;
+  await db.prepare('DELETE FROM course_groups WHERE id = ?').run(ctx.g.id);
+  res.json({ ok: true });
+}));
+
+app.post('/api/admin/groups/:gid/members', authOptional, requireRole('admin', 'super_admin'), ah(async (req, res) => {
+  const ctx = await groupGuard(req, res); if (!ctx) return;
+  const userId = Number(req.body?.userId);
+  if (!userId) return res.status(400).json({ error: 'Pick a learner' });
+  await db.prepare('INSERT OR IGNORE INTO group_members (group_id, user_id) VALUES (?,?)').run(ctx.g.id, userId);
+  await notify(userId, 'group', `You were added to a team`, `${ctx.course.title}: ${ctx.g.name}`, `/course/${ctx.course.slug}`);
+  res.json({ group: await groupView(ctx.g) });
+}));
+
+app.delete('/api/admin/groups/:gid/members/:userId', authOptional, requireRole('admin', 'super_admin'), ah(async (req, res) => {
+  const ctx = await groupGuard(req, res); if (!ctx) return;
+  await db.prepare('DELETE FROM group_members WHERE group_id = ? AND user_id = ?').run(ctx.g.id, req.params.userId);
+  res.json({ group: await groupView(ctx.g) });
+}));
+
+// nominate / unnominate a group leader
+app.post('/api/admin/groups/:gid/leader', authOptional, requireRole('admin', 'super_admin'), ah(async (req, res) => {
+  const ctx = await groupGuard(req, res); if (!ctx) return;
+  const userId = Number(req.body?.userId);
+  const isLeader = req.body?.isLeader ? 1 : 0;
+  await db.prepare('UPDATE group_members SET is_leader = ? WHERE group_id = ? AND user_id = ?').run(isLeader, ctx.g.id, userId);
+  if (isLeader) await notify(userId, 'group', `You're now a group leader`, `${ctx.course.title}: ${ctx.g.name}`, `/course/${ctx.course.slug}`);
+  res.json({ group: await groupView(ctx.g) });
 }));
 
 app.put('/api/admin/courses/:id', authOptional, requireRole('admin', 'super_admin'), ah(async (req, res) => {
