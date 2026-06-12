@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, ShieldCheck, GraduationCap, Award, UserPlus, X, Ban, Trash2, Eye, ChevronRight } from 'lucide-react';
+import { Search, ShieldCheck, GraduationCap, Award, UserPlus, X, Ban, Trash2, Eye, ChevronRight, ArrowDownUp } from 'lucide-react';
 import { api, AdminUser, Role } from '../../api';
 import { StatusBar, Spinner } from '../../components/ui';
 import { useAuth } from '../../auth';
@@ -16,9 +16,13 @@ export default function AdminUsers() {
   const [users, setUsers] = useState<AdminUser[] | null>(null);
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<Role | 'all'>('all');
+  const [sort, setSort] = useState<'name' | 'recent' | 'enrollments'>('name');
+  const [visible, setVisible] = useState(24);
   const [savingId, setSavingId] = useState<number | null>(null);
   const [error, setError] = useState('');
   const [adding, setAdding] = useState(false);
+
+  useEffect(() => { setVisible(24); }, [q, filter, sort]);
 
   const isSuper = user?.role === 'super_admin';
   const load = () => api.get<{ users: AdminUser[] }>('/admin/users').then((d) => setUsers(d.users));
@@ -42,9 +46,22 @@ export default function AdminUsers() {
   };
 
   if (!users) return <Spinner />;
-  const filtered = users.filter((u) =>
-    (filter === 'all' || u.role === filter) &&
-    (u.fullName.toLowerCase().includes(q.toLowerCase()) || u.email.toLowerCase().includes(q.toLowerCase())));
+  const counts = {
+    all: users.length,
+    learner: users.filter((u) => u.role === 'learner').length,
+    admin: users.filter((u) => u.role === 'admin').length,
+    super_admin: users.filter((u) => u.role === 'super_admin').length,
+  };
+  const term = q.trim().toLowerCase();
+  const filtered = users
+    .filter((u) =>
+      (filter === 'all' || u.role === filter) &&
+      (!term || u.fullName.toLowerCase().includes(term) || u.email.toLowerCase().includes(term)))
+    .sort((a, b) =>
+      sort === 'name' ? a.fullName.localeCompare(b.fullName)
+        : sort === 'enrollments' ? (b.enrollments - a.enrollments)
+        : (b.id - a.id)); // recent = newest id first
+  const shown = filtered.slice(0, visible);
 
   return (
     <div className="pb-6">
@@ -59,10 +76,18 @@ export default function AdminUsers() {
 
       {error && <div className="mx-5 mt-3 text-sm bg-red-50 text-red-600 rounded-xl px-4 py-3">{error}</div>}
 
-      <div className="px-5 mt-4">
-        <div className="flex items-center gap-2 bg-black/[0.04] rounded-2xl px-4 py-3">
+      <div className="px-5 mt-4 flex gap-2">
+        <div className="flex items-center gap-2 bg-black/[0.04] rounded-2xl px-4 py-3 flex-1">
           <Search size={18} className="text-sub" />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name or email…" className="flex-1 bg-transparent outline-none text-[15px]" />
+        </div>
+        <div className="flex items-center gap-1.5 bg-black/[0.04] rounded-2xl px-3">
+          <ArrowDownUp size={16} className="text-sub" />
+          <select value={sort} onChange={(e) => setSort(e.target.value as any)} className="bg-transparent outline-none text-sm font-semibold text-navy py-3">
+            <option value="name">Name A–Z</option>
+            <option value="recent">Newest</option>
+            <option value="enrollments">Most enrolled</option>
+          </select>
         </div>
       </div>
 
@@ -70,13 +95,15 @@ export default function AdminUsers() {
         {(['all', 'learner', 'admin', 'super_admin'] as const).map((r) => (
           <button key={r} onClick={() => setFilter(r)}
             className={`chip whitespace-nowrap border ${filter === r ? 'bg-brand text-white border-brand' : 'bg-white text-navy border-black/10'}`}>
-            {r === 'all' ? 'All' : ROLE_LABEL[r]}
+            {r === 'all' ? 'All' : ROLE_LABEL[r]} <span className={filter === r ? 'text-white/80' : 'text-sub'}>· {counts[r]}</span>
           </button>
         ))}
       </div>
 
-      <div className="px-5 mt-4 grid grid-cols-1 xl:grid-cols-2 gap-3">
-        {filtered.map((u) => {
+      <p className="px-5 mt-3 text-xs text-sub">Showing {shown.length} of {filtered.length}{filtered.length !== users.length ? ` (filtered from ${users.length})` : ''}</p>
+
+      <div className="px-5 mt-2 grid grid-cols-1 xl:grid-cols-2 gap-3">
+        {shown.map((u) => {
           const isSelf = u.id === user?.id;
           const canManageStaff = isSuper || u.role === 'learner';
           return (
@@ -126,8 +153,14 @@ export default function AdminUsers() {
             </div>
           );
         })}
-        {filtered.length === 0 && <p className="text-center text-sub py-10">No users match.</p>}
+        {filtered.length === 0 && <p className="text-center text-sub py-10 xl:col-span-2">No users match.</p>}
       </div>
+
+      {shown.length < filtered.length && (
+        <div className="px-5 mt-4">
+          <button onClick={() => setVisible((v) => v + 24)} className="btn-outline w-full">Load more ({filtered.length - shown.length} more)</button>
+        </div>
+      )}
 
       {adding && <AddUser isSuper={isSuper} onClose={() => setAdding(false)} onAdded={() => { setAdding(false); load(); }} />}
     </div>
