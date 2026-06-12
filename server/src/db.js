@@ -1,30 +1,78 @@
-import { DatabaseSync } from 'node:sqlite';
+import './config.js'; // load .env into process.env BEFORE we read any settings below
+import { createClient } from '@libsql/client';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { mkdirSync } from 'node:fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const dataDir = join(__dirname, '..', 'data');
-mkdirSync(dataDir, { recursive: true });
 
-export const db = new DatabaseSync(join(dataDir, 'teli.db'));
+// Where local data lives when no cloud database is configured.
+export const DATA_DIR = process.env.DATA_DIR || join(__dirname, '..', 'data');
+mkdirSync(DATA_DIR, { recursive: true });
 
-db.exec('PRAGMA journal_mode = WAL;');
-db.exec('PRAGMA foreign_keys = ON;');
+// In production set DATABASE_URL (+ DATABASE_AUTH_TOKEN) to a Turso/libSQL
+// database so data is permanent. Locally it defaults to a file on disk.
+const url = process.env.DATABASE_URL || `file:${join(DATA_DIR, 'teli.db')}`;
+const authToken = process.env.DATABASE_AUTH_TOKEN || undefined;
+export const usingCloudDb = !!process.env.DATABASE_URL;
 
-db.exec(`
+const client = createClient(authToken ? { url, authToken } : { url });
+
+// Treat a single object arg as named parameters (e.g. @slug); otherwise positional.
+function normArgs(args) {
+  if (args.length === 1 && args[0] !== null && typeof args[0] === 'object' && !Array.isArray(args[0])) {
+    return args[0];
+  }
+  return args;
+}
+
+// A thin async wrapper that mirrors the previous node:sqlite API
+// (db.prepare(sql).get/all/run), but every call returns a promise.
+export const db = {
+  prepare(sql) {
+    return {
+      async get(...args) {
+        const r = await client.execute({ sql, args: normArgs(args) });
+        return r.rows[0];
+      },
+      async all(...args) {
+        const r = await client.execute({ sql, args: normArgs(args) });
+        return r.rows;
+      },
+      async run(...args) {
+        const r = await client.execute({ sql, args: normArgs(args) });
+        return {
+          lastInsertRowid: r.lastInsertRowid != null ? Number(r.lastInsertRowid) : undefined,
+          changes: Number(r.rowsAffected || 0),
+        };
+      },
+    };
+  },
+  async exec(sql) { await client.executeMultiple(sql); },
+  client,
+};
+
+async function addColumn(table, col, ddl) {
+  const cols = (await client.execute(`PRAGMA table_info(${table})`)).rows.map((c) => c.name);
+  if (!cols.includes(col)) await client.execute(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+}
+
+// Create tables + run migrations. Must be awaited before serving requests.
+export async function initDb() {
+  try { await client.execute('PRAGMA foreign_keys = ON'); } catch { /* best effort */ }
+
+  await client.executeMultiple(`
 CREATE TABLE IF NOT EXISTS users (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
   full_name    TEXT NOT NULL,
   email        TEXT NOT NULL UNIQUE,
   password     TEXT NOT NULL,
   tagline      TEXT DEFAULT 'Making an impact through learning',
-  role         TEXT NOT NULL DEFAULT 'learner',  -- learner | admin | super_admin
+  role         TEXT NOT NULL DEFAULT 'learner',
   points       INTEGER NOT NULL DEFAULT 0,
   streak_days  INTEGER NOT NULL DEFAULT 0,
   created_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
-
 CREATE TABLE IF NOT EXISTS courses (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   slug          TEXT NOT NULL UNIQUE,
@@ -44,7 +92,6 @@ CREATE TABLE IF NOT EXISTS courses (
   icon          TEXT NOT NULL DEFAULT 'target',
   outcomes      TEXT NOT NULL DEFAULT '[]'
 );
-
 CREATE TABLE IF NOT EXISTS modules (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   course_id   INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
@@ -52,17 +99,15 @@ CREATE TABLE IF NOT EXISTS modules (
   title       TEXT NOT NULL,
   subtitle    TEXT
 );
-
 CREATE TABLE IF NOT EXISTS lessons (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   module_id   INTEGER NOT NULL REFERENCES modules(id) ON DELETE CASCADE,
   position    INTEGER NOT NULL,
   title       TEXT NOT NULL,
-  kind        TEXT NOT NULL DEFAULT 'reading',  -- reading | video | activity | quiz
+  kind        TEXT NOT NULL DEFAULT 'reading',
   duration    TEXT NOT NULL DEFAULT '05:00',
-  body        TEXT NOT NULL DEFAULT '{}'        -- JSON payload (content, video, activity, quiz)
+  body        TEXT NOT NULL DEFAULT '{}'
 );
-
 CREATE TABLE IF NOT EXISTS reviews (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   course_id   INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
@@ -71,7 +116,6 @@ CREATE TABLE IF NOT EXISTS reviews (
   body        TEXT NOT NULL,
   created_at  TEXT NOT NULL DEFAULT (date('now'))
 );
-
 CREATE TABLE IF NOT EXISTS enrollments (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -82,7 +126,6 @@ CREATE TABLE IF NOT EXISTS enrollments (
   created_at    TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(user_id, course_id)
 );
-
 CREATE TABLE IF NOT EXISTS lesson_progress (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -91,7 +134,6 @@ CREATE TABLE IF NOT EXISTS lesson_progress (
   completed_at TEXT,
   UNIQUE(user_id, lesson_id)
 );
-
 CREATE TABLE IF NOT EXISTS quiz_attempts (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -103,7 +145,6 @@ CREATE TABLE IF NOT EXISTS quiz_attempts (
   answers     TEXT NOT NULL DEFAULT '[]',
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
-
 CREATE TABLE IF NOT EXISTS certificates (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -111,7 +152,6 @@ CREATE TABLE IF NOT EXISTS certificates (
   issued_at   TEXT NOT NULL DEFAULT (date('now')),
   UNIQUE(user_id, course_id)
 );
-
 CREATE TABLE IF NOT EXISTS achievements (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -124,14 +164,13 @@ CREATE TABLE IF NOT EXISTS achievements (
 );
 `);
 
-// ===================== additional feature tables =====================
-db.exec(`
+  await client.executeMultiple(`
 CREATE TABLE IF NOT EXISTS coupons (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   code        TEXT NOT NULL UNIQUE,
-  kind        TEXT NOT NULL DEFAULT 'percent',   -- percent | fixed
-  value       INTEGER NOT NULL,                  -- percent (0-100) or naira amount
-  course_id   INTEGER REFERENCES courses(id) ON DELETE CASCADE, -- NULL = any course
+  kind        TEXT NOT NULL DEFAULT 'percent',
+  value       INTEGER NOT NULL,
+  course_id   INTEGER REFERENCES courses(id) ON DELETE CASCADE,
   max_uses    INTEGER NOT NULL DEFAULT 1,
   used_count  INTEGER NOT NULL DEFAULT 0,
   single_use  INTEGER NOT NULL DEFAULT 1,
@@ -140,7 +179,6 @@ CREATE TABLE IF NOT EXISTS coupons (
   created_by  INTEGER REFERENCES users(id),
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
-
 CREATE TABLE IF NOT EXISTS orders (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   reference   TEXT NOT NULL UNIQUE,
@@ -150,23 +188,21 @@ CREATE TABLE IF NOT EXISTS orders (
   discount    INTEGER NOT NULL DEFAULT 0,
   amount      INTEGER NOT NULL,
   coupon_code TEXT,
-  status      TEXT NOT NULL DEFAULT 'pending',   -- pending | paid | failed | free
-  provider    TEXT NOT NULL DEFAULT 'paystack',  -- paystack | sandbox | free
+  status      TEXT NOT NULL DEFAULT 'pending',
+  provider    TEXT NOT NULL DEFAULT 'paystack',
   created_at  TEXT NOT NULL DEFAULT (datetime('now')),
   paid_at     TEXT
 );
-
 CREATE TABLE IF NOT EXISTS tickets (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   subject     TEXT NOT NULL,
   category    TEXT NOT NULL DEFAULT 'General',
-  priority    TEXT NOT NULL DEFAULT 'normal',     -- low | normal | high
-  status      TEXT NOT NULL DEFAULT 'open',       -- open | pending | resolved | closed
+  priority    TEXT NOT NULL DEFAULT 'normal',
+  status      TEXT NOT NULL DEFAULT 'open',
   created_at  TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
-
 CREATE TABLE IF NOT EXISTS ticket_messages (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   ticket_id   INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
@@ -176,7 +212,6 @@ CREATE TABLE IF NOT EXISTS ticket_messages (
   body        TEXT NOT NULL,
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
-
 CREATE TABLE IF NOT EXISTS audit_log (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   actor_id    INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -187,7 +222,6 @@ CREATE TABLE IF NOT EXISTS audit_log (
   target_id   INTEGER,
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
-
 CREATE TABLE IF NOT EXISTS password_resets (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -195,18 +229,16 @@ CREATE TABLE IF NOT EXISTS password_resets (
   expires_at  TEXT NOT NULL,
   used        INTEGER NOT NULL DEFAULT 0
 );
-
 CREATE TABLE IF NOT EXISTS notifications (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  type        TEXT NOT NULL DEFAULT 'info',  -- info | success | payment | ticket | certificate | system
+  type        TEXT NOT NULL DEFAULT 'info',
   title       TEXT NOT NULL,
   body        TEXT NOT NULL DEFAULT '',
   link        TEXT,
   read        INTEGER NOT NULL DEFAULT 0,
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
-
 CREATE TABLE IF NOT EXISTS referrals (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -215,19 +247,13 @@ CREATE TABLE IF NOT EXISTS referrals (
 );
 `);
 
-// ---- migrations for pre-existing databases ----
-function addColumn(table, col, ddl) {
-  const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
-  if (!cols.includes(col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl};`);
+  // migrations for pre-existing databases
+  await addColumn('users', 'google_id', 'google_id TEXT');
+  await addColumn('users', 'active', 'active INTEGER NOT NULL DEFAULT 1');
+  await addColumn('users', 'created_by', 'created_by INTEGER');
+  await addColumn('courses', 'cert_min_progress', 'cert_min_progress INTEGER NOT NULL DEFAULT 100');
+  await addColumn('courses', 'cert_min_quiz_score', 'cert_min_quiz_score INTEGER NOT NULL DEFAULT 0');
+  await addColumn('courses', 'cert_require_quizzes', 'cert_require_quizzes INTEGER NOT NULL DEFAULT 1');
+  await addColumn('courses', 'published', 'published INTEGER NOT NULL DEFAULT 1');
+  await addColumn('lessons', 'resources', "resources TEXT NOT NULL DEFAULT '[]'");
 }
-addColumn('users', 'role', `role TEXT NOT NULL DEFAULT 'learner'`);
-addColumn('users', 'google_id', `google_id TEXT`);
-addColumn('users', 'active', `active INTEGER NOT NULL DEFAULT 1`);
-addColumn('users', 'created_by', `created_by INTEGER`);
-// certificate auto-issue conditions (settable per course by admins)
-addColumn('courses', 'cert_min_progress', `cert_min_progress INTEGER NOT NULL DEFAULT 100`);
-addColumn('courses', 'cert_min_quiz_score', `cert_min_quiz_score INTEGER NOT NULL DEFAULT 0`);
-addColumn('courses', 'cert_require_quizzes', `cert_require_quizzes INTEGER NOT NULL DEFAULT 1`);
-addColumn('courses', 'published', `published INTEGER NOT NULL DEFAULT 1`);
-// per-lesson resources (JSON array of {name,url})
-addColumn('lessons', 'resources', `resources TEXT NOT NULL DEFAULT '[]'`);

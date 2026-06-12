@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+web/node_modules/
+server/node_modules/
+
+# Build output
+dist/
+web/dist/
+
+# Environment files
+.env
+.env.local
+.env.production
+web/.env
+server/.env
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Vercel
+.vercel/
+
+# Uploads (user-uploaded files live on the server's persistent disk, not in Git)
+server/uploads/
+
+# SQLite database files (live on the persistent disk, not in Git)
+server/data/
+*.sqlite
+*.sqlite3
+*.db
+*.db-wal
+*.db-shm

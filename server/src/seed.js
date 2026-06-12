@@ -1,14 +1,26 @@
 import bcrypt from 'bcryptjs';
-import { db } from './db.js';
+import { db, initDb } from './db.js';
 
-// ---- reset catalog (keeps user accounts) ----
-db.exec(`
-  DELETE FROM reviews;
-  DELETE FROM lessons;
-  DELETE FROM modules;
-  DELETE FROM courses;
-  DELETE FROM sqlite_sequence WHERE name IN ('courses','modules','lessons','reviews');
-`);
+// Idempotent seeding: only populate the catalog when the database is empty.
+// Safe to run on every boot — a fresh (persistent) database gets the starter
+// catalog once; later restarts never wipe courses your team has added/edited.
+const FORCE_RESEED = process.env.FORCE_RESEED === '1';
+
+await initDb();
+
+let skipCatalog = ((await db.prepare('SELECT COUNT(*) c FROM courses').get()).c > 0) && !FORCE_RESEED;
+if (skipCatalog) {
+  console.log('Catalog already present — skipping course seeding (data preserved).');
+} else if (FORCE_RESEED) {
+  console.log('FORCE_RESEED=1 — resetting catalog.');
+  await db.exec(`
+    DELETE FROM reviews;
+    DELETE FROM lessons;
+    DELETE FROM modules;
+    DELETE FROM courses;
+    DELETE FROM sqlite_sequence WHERE name IN ('courses','modules','lessons','reviews');
+  `);
+}
 
 const insCourse = db.prepare(`
   INSERT INTO courses (slug,title,category,provider,level,duration,summary,description,price,old_price,discount,rating,reviews_count,color,icon,outcomes)
@@ -18,21 +30,25 @@ const insModule = db.prepare(`INSERT INTO modules (course_id,position,title,subt
 const insLesson = db.prepare(`INSERT INTO lessons (module_id,position,title,kind,duration,body) VALUES (?,?,?,?,?,?)`);
 const insReview = db.prepare(`INSERT INTO reviews (course_id,author,rating,body) VALUES (?,?,?,?)`);
 
-function course(data, modules = [], reviews = []) {
+async function course(data, modules = [], reviews = []) {
+  if (skipCatalog) return null;
   const defaults = {
     provider: 'The Elevate Learning Institute', level: 'Beginner', duration: '6 weeks',
     old_price: null, discount: null, rating: 4.8, reviews_count: 0, color: 'navy',
     icon: 'target', outcomes: [],
   };
   const row = { ...defaults, ...data, outcomes: JSON.stringify(data.outcomes ?? []) };
-  const courseId = insCourse.run(row).lastInsertRowid;
-  modules.forEach((m, mi) => {
-    const moduleId = insModule.run(courseId, mi + 1, m.title, m.subtitle ?? null).lastInsertRowid;
-    (m.lessons ?? []).forEach((l, li) => {
-      insLesson.run(moduleId, li + 1, l.title, l.kind ?? 'reading', l.duration ?? '05:00', JSON.stringify(l.body ?? {}));
-    });
-  });
-  reviews.forEach((r) => insReview.run(courseId, r.author, r.rating, r.body));
+  const courseId = (await insCourse.run(row)).lastInsertRowid;
+  for (let mi = 0; mi < modules.length; mi++) {
+    const m = modules[mi];
+    const moduleId = (await insModule.run(courseId, mi + 1, m.title, m.subtitle ?? null)).lastInsertRowid;
+    const lessons = m.lessons ?? [];
+    for (let li = 0; li < lessons.length; li++) {
+      const l = lessons[li];
+      await insLesson.run(moduleId, li + 1, l.title, l.kind ?? 'reading', l.duration ?? '05:00', JSON.stringify(l.body ?? {}));
+    }
+  }
+  for (const r of reviews) await insReview.run(courseId, r.author, r.rating, r.body);
   return courseId;
 }
 
@@ -108,7 +124,7 @@ const donorActivity = {
   ],
 };
 
-course(
+await course(
   {
     slug: 'fundraising-strategy-for-nonprofits',
     title: 'Fundraising Strategy for Nonprofits',
@@ -219,7 +235,6 @@ course(
 
 // ============================ Helper for lighter courses ============================
 function simpleModules(specs) {
-  // specs: [{ title, lessons: [titles...] }]
   return specs.map((s) => ({
     title: s.title,
     subtitle: s.subtitle,
@@ -247,7 +262,7 @@ const genericQuiz = (topic) => ({ passScore: 60, questions: [
 ]});
 
 // ============================ Other catalog courses ============================
-course({
+await course({
   slug: 'communication-for-social-impact', title: 'Communication for Social Impact', category: 'Communication',
   level: 'Beginner', duration: '6 weeks', summary: 'Learn how to communicate your mission, engage stakeholders and drive change.',
   description: 'Master the art of clear, persuasive communication for purpose-driven work — from storytelling and messaging to stakeholder engagement and advocacy.',
@@ -259,7 +274,7 @@ course({
   { title: 'Channels & Campaigns', lessons: ['Choosing the Right Channel', 'Writing for Social Media', 'Building a Campaign'] },
 ]), [ { author: 'Bola K.', rating: 5, body: 'Transformed how our team talks about our work.' } ]);
 
-course({
+await course({
   slug: 'monitoring-evaluation-basics', title: 'Monitoring & Evaluation Basics', category: 'Monitoring & Evaluation',
   level: 'Beginner', duration: '5 weeks', summary: 'Build M&E frameworks that help you measure impact and improve outcomes.',
   description: 'Learn the essentials of monitoring and evaluation — from theory of change and indicators to data collection, analysis, and learning.',
@@ -271,7 +286,7 @@ course({
   { title: 'Analysis & Learning', lessons: ['Analyzing Your Data', 'Reporting Results', 'Learning & Adaptation'] },
 ]), [ { author: 'Ifeoma U.', rating: 5, body: 'Finally understand indicators. Super practical.' } ]);
 
-course({
+await course({
   slug: 'leadership-essentials-for-changemakers', title: 'Leadership Essentials for Changemakers', category: 'Leadership',
   level: 'Beginner', duration: '4 weeks', summary: 'Develop the mindset and practical skills to inspire people, lead teams and drive meaningful change.',
   description: 'This course equips you with the core leadership competencies needed to lead people, projects and purpose-driven organizations. Through practical examples and actionable frameworks, you’ll learn how to inspire, influence and create lasting impact in your community and beyond.',
@@ -286,7 +301,7 @@ course({
   { author: 'Halima S.', rating: 4, body: 'Loved the mindset module.' },
 ]);
 
-course({
+await course({
   slug: 'sdgs-essentials', title: 'Sustainable Development Goals (SDGs) Essentials', category: 'Sustainability',
   level: 'Beginner', duration: '5 weeks', summary: 'Understand the SDGs and how to integrate them into your projects and programs.',
   description: 'Get a working knowledge of the 17 Sustainable Development Goals and learn to align your programs, measure contribution, and report progress.',
@@ -297,7 +312,7 @@ course({
   { title: 'Applying the SDGs', lessons: ['Mapping Your Work', 'Setting Targets', 'Measuring Contribution', 'SDG Quiz'], quiz: genericQuiz('SDG alignment') },
 ]), []);
 
-course({
+await course({
   slug: 'project-management-for-ngos', title: 'Project Management for NGOs', category: 'Project Management',
   level: 'Beginner', duration: '6 weeks', summary: 'Plan, execute and deliver impact-driven projects on time and on budget.',
   description: 'A practical project-management course tailored to the realities of NGOs and social-impact teams — covering planning, budgeting, risk, and delivery.',
@@ -308,7 +323,7 @@ course({
   { title: 'Delivery & Control', lessons: ['Managing Risk', 'Tracking Progress', 'Project Closure', 'PM Quiz'], quiz: genericQuiz('project management') },
 ]), []);
 
-course({
+await course({
   slug: 'policy-analysis-fundamentals', title: 'Policy Analysis Fundamentals', category: 'Policy',
   level: 'Beginner', duration: '6 weeks', summary: 'Analyze policy problems and craft evidence-based recommendations.',
   description: 'Learn a structured approach to analyzing policy, weighing options, and communicating recommendations to decision-makers.',
@@ -319,7 +334,7 @@ course({
   { title: 'Doing the Analysis', lessons: ['Gathering Evidence', 'Comparing Options', 'Writing a Policy Brief', 'Policy Quiz'], quiz: genericQuiz('policy analysis') },
 ]), []);
 
-course({
+await course({
   slug: 'partnerships-stakeholder-engagement', title: 'Partnerships & Stakeholder Engagement', category: 'Leadership',
   level: 'Beginner', duration: '4 weeks', summary: 'Build and manage partnerships that multiply your impact.',
   description: 'Learn to identify, build, and sustain partnerships and engage stakeholders for collective impact.',
@@ -330,7 +345,7 @@ course({
   { title: 'Building Partnerships', lessons: ['Finding the Right Partners', 'Structuring Partnerships', 'Sustaining Trust', 'Partnership Quiz'], quiz: genericQuiz('stakeholder engagement') },
 ]), []);
 
-course({
+await course({
   slug: 'social-entrepreneurship-innovation', title: 'Social Entrepreneurship & Innovation Fundamentals', category: 'Sustainability',
   level: 'Beginner', duration: '6 weeks', summary: 'Turn ideas into sustainable solutions for social problems.',
   description: 'Explore how to design, test, and scale ventures that create social value while staying financially sustainable.',
@@ -342,39 +357,39 @@ course({
 ]), []);
 
 // ============================ Demo accounts ============================
-function ensureUser({ name, email, password, tagline, points = 0, streak = 0, role = 'learner' }) {
-  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+async function ensureUser({ name, email, password, tagline, points = 0, streak = 0, role = 'learner' }) {
+  const existing = await db.prepare('SELECT id FROM users WHERE email = ?').get(email);
   if (existing) {
-    db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, existing.id);
+    await db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, existing.id);
     return;
   }
   const hash = bcrypt.hashSync(password, 10);
-  db.prepare('INSERT INTO users (full_name,email,password,tagline,role,points,streak_days) VALUES (?,?,?,?,?,?,?)')
+  await db.prepare('INSERT INTO users (full_name,email,password,tagline,role,points,streak_days) VALUES (?,?,?,?,?,?,?)')
     .run(name, email, hash, tagline, role, points, streak);
 }
 
-ensureUser({ name: 'Frances Okoro', email: 'frances@teli.africa', password: 'password123', tagline: 'Making an impact through learning', points: 1250, streak: 7, role: 'learner' });
-ensureUser({ name: 'Tobi Adeyemi', email: 'admin@teli.africa', password: 'password123', tagline: 'Course administrator', role: 'admin' });
-ensureUser({ name: 'Ada Nwosu', email: 'super@teli.africa', password: 'password123', tagline: 'Platform owner', role: 'super_admin' });
+await ensureUser({ name: 'Frances Okoro', email: 'frances@teli.africa', password: 'password123', tagline: 'Making an impact through learning', points: 1250, streak: 7, role: 'learner' });
+await ensureUser({ name: 'Tobi Adeyemi', email: 'admin@teli.africa', password: 'password123', tagline: 'Course administrator', role: 'admin' });
+await ensureUser({ name: 'Ada Nwosu', email: 'super@teli.africa', password: 'password123', tagline: 'Platform owner', role: 'super_admin' });
 
 // ============================ Sample coupons ============================
-const fundraising = db.prepare("SELECT id FROM courses WHERE slug = 'fundraising-strategy-for-nonprofits'").get();
-const superUser = db.prepare("SELECT id FROM users WHERE email = 'super@teli.africa'").get();
-function ensureCoupon(code, kind, value, courseId, singleUse) {
-  if (db.prepare('SELECT id FROM coupons WHERE code = ?').get(code)) return;
-  db.prepare('INSERT INTO coupons (code,kind,value,course_id,max_uses,single_use,active,created_by) VALUES (?,?,?,?,?,?,1,?)')
+const fundraising = await db.prepare("SELECT id FROM courses WHERE slug = 'fundraising-strategy-for-nonprofits'").get();
+const superUser = await db.prepare("SELECT id FROM users WHERE email = 'super@teli.africa'").get();
+async function ensureCoupon(code, kind, value, courseId, singleUse) {
+  if (await db.prepare('SELECT id FROM coupons WHERE code = ?').get(code)) return;
+  await db.prepare('INSERT INTO coupons (code,kind,value,course_id,max_uses,single_use,active,created_by) VALUES (?,?,?,?,?,?,1,?)')
     .run(code, kind, value, courseId, singleUse ? 1 : 100, singleUse ? 1 : 0, superUser?.id || null);
 }
-ensureCoupon('WELCOME20', 'percent', 20, null, false);          // 20% off anything, multi-use
-ensureCoupon('LAUNCH5000', 'fixed', 5000, null, false);         // ₦5,000 off anything
-ensureCoupon('FREEFUND', 'percent', 100, fundraising?.id, true); // single-use 100% off Fundraising
+await ensureCoupon('WELCOME20', 'percent', 20, null, false);
+await ensureCoupon('LAUNCH5000', 'fixed', 5000, null, false);
+await ensureCoupon('FREEFUND', 'percent', 100, fundraising?.id, true);
 
 const counts = {
-  courses: db.prepare('SELECT COUNT(*) c FROM courses').get().c,
-  modules: db.prepare('SELECT COUNT(*) c FROM modules').get().c,
-  lessons: db.prepare('SELECT COUNT(*) c FROM lessons').get().c,
-  users: db.prepare('SELECT COUNT(*) c FROM users').get().c,
-  coupons: db.prepare('SELECT COUNT(*) c FROM coupons').get().c,
+  courses: (await db.prepare('SELECT COUNT(*) c FROM courses').get()).c,
+  modules: (await db.prepare('SELECT COUNT(*) c FROM modules').get()).c,
+  lessons: (await db.prepare('SELECT COUNT(*) c FROM lessons').get()).c,
+  users: (await db.prepare('SELECT COUNT(*) c FROM users').get()).c,
+  coupons: (await db.prepare('SELECT COUNT(*) c FROM coupons').get()).c,
 };
 console.log('Seed complete:', counts);
 console.log('Logins:');
