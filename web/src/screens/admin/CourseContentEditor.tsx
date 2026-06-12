@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { api, CourseDetail as CD, LessonNode, LessonKind, uploadFile } from '../../api';
 import { TopBar, Spinner } from '../../components/ui';
+import { RichText } from '../../components/RichText';
 
 const KIND_ICON: Record<string, any> = { video: Video, reading: FileText, activity: Puzzle, quiz: HelpCircle };
 
@@ -142,7 +143,7 @@ function LessonEditor({ moduleId, lesson, onClose, onSaved }: { moduleId: number
               <Field label="Video URL (YouTube, Vimeo, MP4…)">
                 <input className="field" value={body.videoUrl || ''} onChange={(e) => set('videoUrl', e.target.value)} placeholder="https://…" />
               </Field>
-              <Field label="Introduction"><textarea className="field h-20" value={body.intro || ''} onChange={(e) => set('intro', e.target.value)} /></Field>
+              <Field label="Introduction"><RichText value={body.intro || ''} onChange={(v) => set('intro', v)} placeholder="Introduce this video…" /></Field>
               <ListEditor label="Key takeaways" items={body.takeaways || []} onChange={(v) => set('takeaways', v)} />
             </>
           )}
@@ -150,10 +151,10 @@ function LessonEditor({ moduleId, lesson, onClose, onSaved }: { moduleId: number
           {kind === 'reading' && (
             <>
               <Field label="Heading"><input className="field" value={body.heading || ''} onChange={(e) => set('heading', e.target.value)} /></Field>
-              <Field label="Introduction"><textarea className="field h-20" value={body.intro || ''} onChange={(e) => set('intro', e.target.value)} /></Field>
+              <Field label="Introduction"><RichText value={body.intro || ''} onChange={(v) => set('intro', v)} placeholder="Write the introduction…" /></Field>
               <PointsEditor points={body.points || []} onChange={(v) => set('points', v)} />
-              <Field label="Remember (callout)"><textarea className="field h-16" value={body.remember || ''} onChange={(e) => set('remember', e.target.value)} /></Field>
-              <Field label="Quote / example"><input className="field" value={body.quote || ''} onChange={(e) => set('quote', e.target.value)} /></Field>
+              <Field label="Remember (callout)"><RichText value={body.remember || ''} onChange={(v) => set('remember', v)} placeholder="A key thing to remember…" minHeight={72} /></Field>
+              <Field label="Quote / example"><RichText value={body.quote || ''} onChange={(v) => set('quote', v)} placeholder="An example or quote…" minHeight={72} /></Field>
             </>
           )}
 
@@ -163,19 +164,27 @@ function LessonEditor({ moduleId, lesson, onClose, onSaved }: { moduleId: number
 
           {/* resources + upload (all kinds) */}
           <div>
-            <p className="text-sm font-bold text-navy mb-2">Resources & uploads</p>
+            <p className="text-sm font-bold text-navy mb-1">Resources & links</p>
+            <p className="text-xs text-sub mb-2">The “display name” is what learners see and click — not the raw URL.</p>
             {resources.map((r, i) => (
-              <div key={i} className="flex items-center gap-2 mb-2">
-                <Link2 size={15} className="text-sub" />
-                <input className="field flex-1 py-2 text-sm" value={r.name} onChange={(e) => setResources(resources.map((x, j) => j === i ? { ...x, name: e.target.value } : x))} placeholder="Name" />
-                <button onClick={() => setResources(resources.filter((_, j) => j !== i))} className="text-red-500"><Trash2 size={15} /></button>
+              <div key={i} className="card p-3 mb-2 bg-black/[0.02]">
+                <div className="flex items-center gap-2">
+                  <Link2 size={15} className="text-brand shrink-0" />
+                  <input className="field flex-1 py-2 text-sm" value={r.name}
+                    onChange={(e) => setResources(resources.map((x, j) => j === i ? { ...x, name: e.target.value } : x))}
+                    placeholder="Display name (e.g. Fundraising toolkit)" />
+                  <button onClick={() => setResources(resources.filter((_, j) => j !== i))} className="text-red-500"><Trash2 size={15} /></button>
+                </div>
+                <input className="field py-2 text-sm mt-2 w-full" value={r.url === '#' ? '' : r.url}
+                  onChange={(e) => setResources(resources.map((x, j) => j === i ? { ...x, url: e.target.value } : x))}
+                  placeholder="https://… (link or video URL)" />
               </div>
             ))}
-            <div className="flex gap-2 mt-2">
-              <button onClick={() => setResources([...resources, { name: 'New resource', url: '#' }])} className="text-brand font-bold text-sm flex items-center gap-1"><Plus size={15} /> Add link</button>
+            <div className="flex gap-3 mt-2">
+              <button onClick={() => setResources([...resources, { name: '', url: '' }])} className="text-brand font-bold text-sm flex items-center gap-1"><Plus size={15} /> Add link</button>
               <label className="text-navy font-bold text-sm flex items-center gap-1 cursor-pointer">
                 <Upload size={15} /> Upload file
-                <input type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) onUpload(f, (url) => setResources([...resources, { name: f.name, url }])); }} />
+                <input type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) onUpload(f, (url) => setResources([...resources, { name: f.name.replace(/\.[a-z0-9]+$/i, ''), url }])); }} />
               </label>
             </div>
           </div>
@@ -220,7 +229,7 @@ function PointsEditor({ points, onChange }: { points: any[]; onChange: (v: any[]
             <input className="field py-2 text-sm flex-1" value={p.title || ''} onChange={(e) => upd(i, 'title', e.target.value)} placeholder="Title" />
             <button onClick={() => onChange(points.filter((_, j) => j !== i))} className="text-red-500"><Trash2 size={15} /></button>
           </div>
-          <textarea className="field py-2 text-sm h-14 mt-2" value={p.text || ''} onChange={(e) => upd(i, 'text', e.target.value)} placeholder="Description" />
+          <div className="mt-2"><RichText value={p.text || ''} onChange={(v) => upd(i, 'text', v)} placeholder="Description" minHeight={56} /></div>
         </div>
       ))}
       <button onClick={() => onChange([...points, { icon: 'heart', title: '', text: '' }])} className="text-brand font-bold text-sm flex items-center gap-1"><Plus size={15} /> Add point</button>

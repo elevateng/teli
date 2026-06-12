@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { api, CourseDetail as CD, LessonNode, ModuleNode } from '../api';
 import { Spinner, ProgressBar } from '../components/ui';
+import { RichTextView } from '../components/RichText';
 import { lessonPath } from './CourseDetail';
 
 const POINT_ICON: Record<string, any> = { heart: Heart, shield: Shield, users: Users };
@@ -95,6 +96,12 @@ export default function Lesson() {
         {lesson.kind === 'video' && <VideoLesson lesson={lesson} />}
         {lesson.kind === 'reading' && <ReadingLesson lesson={lesson} />}
         {lesson.kind === 'activity' && <ActivityLesson lesson={lesson} />}
+        {lesson.kind !== 'video' && lesson.resources && lesson.resources.length > 0 && (
+          <div className="px-5 pb-5">
+            <h3 className="text-sm font-bold text-navy mb-2 flex items-center gap-1.5"><FileText size={16} className="text-brand" /> Materials</h3>
+            <ResourcesPanel resources={lesson.resources} />
+          </div>
+        )}
       </div>
 
       {/* footer nav */}
@@ -162,7 +169,7 @@ function VideoLesson({ lesson }: { lesson: LessonNode }) {
         {tab === 'Overview' && (
           <>
             <h2 className="text-[22px] font-extrabold text-navy">{lesson.title}</h2>
-            <p className="text-sub mt-2 leading-relaxed">{b.intro}</p>
+            <RichTextView html={b.intro || ''} className="text-sub mt-2 leading-relaxed" />
             {b.takeaways && (
               <div className="mt-4 rounded-2xl bg-brand-50 p-4">
                 <div className="flex items-center gap-2 mb-2"><span className="w-9 h-9 rounded-full bg-white flex items-center justify-center"><Lightbulb size={18} className="text-brand" /></span><b className="text-navy">Key Takeaways</b></div>
@@ -191,7 +198,7 @@ function ReadingLesson({ lesson }: { lesson: LessonNode }) {
     <div className="px-5 py-6">
       <span className="chip bg-violet-100 text-violet-700 inline-flex items-center gap-1.5"><FileText size={14} /> Reading</span>
       <h2 className="text-[26px] font-extrabold text-navy mt-3 leading-tight">{b.heading || lesson.title}</h2>
-      <p className="text-sub mt-2 leading-relaxed">{b.intro}</p>
+      <RichTextView html={b.intro || ''} className="text-sub mt-2 leading-relaxed" />
 
       {b.points && (
         <div className="mt-5 space-y-4">
@@ -202,7 +209,7 @@ function ReadingLesson({ lesson }: { lesson: LessonNode }) {
                 <span className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 ${POINT_BG[p.icon] || POINT_BG.heart}`}><Ico size={24} /></span>
                 <div>
                   <h3 className="font-extrabold text-navy">{p.title}</h3>
-                  <p className="text-sub text-sm mt-0.5 leading-relaxed">{p.text}</p>
+                  <RichTextView html={p.text || ''} className="text-sub text-sm mt-0.5 leading-relaxed" />
                 </div>
               </div>
             );
@@ -213,7 +220,7 @@ function ReadingLesson({ lesson }: { lesson: LessonNode }) {
       {b.remember && (
         <div className="mt-6 rounded-2xl bg-brand-50 p-4 flex gap-3">
           <span className="w-10 h-10 rounded-full bg-white flex items-center justify-center shrink-0"><Lightbulb size={20} className="text-brand" /></span>
-          <p className="text-sm text-navy"><b className="text-brand">Remember:</b> {b.remember}</p>
+          <div className="text-sm text-navy"><b className="text-brand">Remember:</b> <RichTextView html={b.remember || ''} className="inline" /></div>
         </div>
       )}
 
@@ -222,7 +229,7 @@ function ReadingLesson({ lesson }: { lesson: LessonNode }) {
           <h3 className="text-lg font-extrabold text-navy mt-7">Examples in Action</h3>
           <div className="mt-3 rounded-2xl bg-indigo-50 p-4 flex gap-3 items-start">
             <Quote size={22} className="text-indigo-400 shrink-0" />
-            <p className="text-navy italic">{b.quote}</p>
+            <RichTextView html={b.quote || ''} className="text-navy italic" />
           </div>
         </>
       )}
