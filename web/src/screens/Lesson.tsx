@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   ChevronLeft, Bookmark, MoreVertical, Heart, Shield, Users, Lightbulb, Quote,
   ArrowRight, ArrowLeft, Play, Pause, Maximize, Captions, Settings, Clock, SignalHigh,
-  FileText, Puzzle, CheckCircle2, ListChecks, Flag, Home, GraduationCap,
+  FileText, Puzzle, CheckCircle2, ListChecks, Flag, Home, GraduationCap, Download, StickyNote,
 } from 'lucide-react';
 import { api, CourseDetail as CD, LessonNode, ModuleNode } from '../api';
 import { Spinner, ProgressBar } from '../components/ui';
@@ -105,6 +105,12 @@ export default function Lesson() {
             <ResourcesPanel resources={lesson.resources} />
           </div>
         )}
+        {lesson.kind !== 'video' && (
+          <div className="px-5 pb-6">
+            <h3 className="text-sm font-bold text-navy mb-2 flex items-center gap-1.5"><StickyNote size={16} className="text-brand" /> My Notes</h3>
+            <NotesPanel lessonId={lesson.id} lessonTitle={lesson.title} />
+          </div>
+        )}
       </div>
 
       {/* footer nav */}
@@ -187,7 +193,7 @@ function VideoLesson({ lesson }: { lesson: LessonNode }) {
             </div>
           </>
         )}
-        {tab === 'Notes' && <NotesPanel />}
+        {tab === 'Notes' && <NotesPanel lessonId={lesson.id} lessonTitle={lesson.title} />}
         {tab === 'Resources' && <ResourcesPanel resources={lesson.resources} />}
       </div>
     </div>
@@ -331,13 +337,64 @@ function ActivityLesson({ lesson }: { lesson: LessonNode }) {
   );
 }
 
-function NotesPanel() {
-  const [note, setNote] = useState('');
+function NotesPanel({ lessonId, lessonTitle }: { lessonId: number; lessonTitle: string }) {
+  const key = `teli-note-${lessonId}`;
+  const [note, setNote] = useState(() => localStorage.getItem(key) || '');
+  const [busy, setBusy] = useState('');
+  useEffect(() => { localStorage.setItem(key, note); }, [note, key]);
+
+  const filename = `Notes - ${lessonTitle}`.replace(/[^a-z0-9 \-]/gi, '').trim();
+
+  const triggerDownload = (blob: Blob, ext: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `${filename}.${ext}`; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const downloadPdf = async () => {
+    if (!note.trim()) return;
+    setBusy('pdf');
+    try {
+      const { default: jsPDF } = await import('jspdf');
+      const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+      const margin = 48; const width = doc.internal.pageSize.getWidth() - margin * 2;
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
+      doc.text(lessonTitle, margin, 60);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(11); doc.setTextColor(40);
+      const lines = doc.splitTextToSize(note, width);
+      let y = 88; const lh = 16; const pageH = doc.internal.pageSize.getHeight() - margin;
+      for (const line of lines) { if (y > pageH) { doc.addPage(); y = 60; } doc.text(line, margin, y); y += lh; }
+      doc.save(`${filename}.pdf`);
+    } finally { setBusy(''); }
+  };
+
+  const downloadDocx = async () => {
+    if (!note.trim()) return;
+    setBusy('docx');
+    try {
+      const { Document, Packer, Paragraph, TextRun, HeadingLevel } = await import('docx');
+      const body = note.split('\n').map((line) => new Paragraph({ children: [new TextRun(line)] }));
+      const doc = new Document({ sections: [{ children: [
+        new Paragraph({ text: lessonTitle, heading: HeadingLevel.HEADING_1 }),
+        ...body,
+      ] }] });
+      const blob = await Packer.toBlob(doc);
+      triggerDownload(blob, 'docx');
+    } finally { setBusy(''); }
+  };
+
   return (
     <div>
       <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Write a note for this lesson…"
-        className="w-full h-32 rounded-2xl border border-black/10 p-4 outline-none focus:border-brand/50 text-[15px]" />
-      <p className="text-xs text-sub mt-2">Notes are saved on your device for this demo.</p>
+        className="w-full h-40 rounded-2xl border border-black/10 p-4 outline-none focus:border-brand/50 text-[15px]" />
+      <div className="flex items-center justify-between mt-2 gap-2">
+        <p className="text-xs text-sub">Saved on your device automatically.</p>
+        <div className="flex gap-2">
+          <button onClick={downloadPdf} disabled={!note.trim() || !!busy} className="btn-outline px-3 py-2 text-sm disabled:opacity-40"><Download size={15} /> {busy === 'pdf' ? '…' : 'PDF'}</button>
+          <button onClick={downloadDocx} disabled={!note.trim() || !!busy} className="btn-outline px-3 py-2 text-sm disabled:opacity-40"><Download size={15} /> {busy === 'docx' ? '…' : 'Word'}</button>
+        </div>
+      </div>
     </div>
   );
 }
