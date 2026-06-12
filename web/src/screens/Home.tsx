@@ -55,7 +55,7 @@ export default function Home() {
 
       {/* my courses */}
       <SectionHeader title="My Courses" action="View all" onAction={() => nav('/learning')} />
-      <div className="px-5 space-y-3">
+      <div className="px-5 grid grid-cols-1 xl:grid-cols-2 gap-3">
         {learning.inProgress.map((c) => (
           <button key={c.id} onClick={() => nav(`/course/${c.slug}`)} className="w-full card p-3.5 flex items-center gap-3.5 text-left">
             <CourseThumb icon={c.icon} color={c.color} size={56} />

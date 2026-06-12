@@ -51,9 +51,10 @@ import Community from './screens/Community';
 // auth/standalone screens.
 function Phone({ children, wide }: { children: ReactNode; wide?: boolean }) {
   if (wide) {
+    // Focused/detail flows: fill the width but keep a comfortable reading cap.
     return (
-      <div className="min-h-[100dvh] w-full flex justify-center bg-navy-50/40">
-        <div className="relative w-full lg:max-w-[940px] bg-white flex flex-col h-[100dvh] overflow-hidden lg:border-x lg:border-black/[0.06]">
+      <div className="min-h-[100dvh] w-full flex justify-center bg-white">
+        <div className="relative w-full lg:max-w-[1100px] bg-white flex flex-col h-[100dvh] overflow-hidden">
           {children}
         </div>
       </div>
@@ -75,15 +76,16 @@ function Phone({ children, wide }: { children: ReactNode; wide?: boolean }) {
 // sidebar and a wider layout.
 function Shell({ items, mobileNav }: { items: NavItem[]; mobileNav: ReactNode }) {
   return (
-    <div className="h-[100dvh] w-full flex bg-navy-50/40">
+    <div className="h-[100dvh] w-full flex bg-white">
       <SideNav items={items} />
-      <div className="flex-1 flex justify-center min-w-0">
-        <div className="relative w-full lg:max-w-[940px] bg-white flex flex-col h-[100dvh] overflow-hidden lg:border-x lg:border-black/[0.06]">
-          <div className="flex-1 overflow-y-auto no-scrollbar">
+      <div className="flex-1 flex flex-col h-[100dvh] overflow-hidden min-w-0">
+        <div className="flex-1 overflow-y-auto no-scrollbar">
+          {/* full landscape on desktop; content fills the width up to a large cap */}
+          <div className="mx-auto w-full max-w-[1360px] lg:px-6">
             <Outlet />
           </div>
-          {mobileNav}
         </div>
+        {mobileNav}
       </div>
     </div>
   );

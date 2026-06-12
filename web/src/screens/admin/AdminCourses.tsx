@@ -44,7 +44,7 @@ export default function AdminCourses() {
         </div>
       </div>
 
-      <div className="px-5 mt-4 space-y-3">
+      <div className="px-5 mt-4 grid grid-cols-1 xl:grid-cols-2 gap-3">
         {!courses ? <Spinner /> : filtered.map((c) => (
           <div key={c.id} className="card p-4">
             <div className="flex items-center gap-3">

@@ -36,9 +36,9 @@ function CommunityHub({ onOpen }: { onOpen: (slug: string) => void }) {
         </div>
       </div>
 
-      <div className="px-5 mt-4 space-y-3">
+      <div className="px-5 mt-4 grid grid-cols-1 xl:grid-cols-2 gap-3">
         {!items ? <Spinner /> : items.length === 0 ? (
-          <div className="card p-8 text-center text-sub"><Users size={32} className="mx-auto text-brand mb-2" />Enrol in a course to join its community.</div>
+          <div className="card p-8 text-center text-sub xl:col-span-2"><Users size={32} className="mx-auto text-brand mb-2" />Enrol in a course to join its community.</div>
         ) : items.map((c) => (
           <button key={c.slug} onClick={() => onOpen(c.slug)} className="w-full card p-4 text-left flex items-center gap-3">
             <CourseThumb icon={c.icon} color={c.color} size={48} image={c.image} />
@@ -74,7 +74,7 @@ function CourseCommunity({ slug, onBack }: { slug: string; onBack: () => void })
   const cats = ['All', ...(data?.categories || [])];
 
   return (
-    <div className="pb-6">
+    <div className="pb-6 lg:max-w-[760px] lg:mx-auto">
       <div className="px-5 pt-3 flex items-center gap-2">
         <button onClick={onBack} className="text-navy -ml-1"><ChevronLeft size={24} /></button>
         <div className="flex-1 min-w-0">

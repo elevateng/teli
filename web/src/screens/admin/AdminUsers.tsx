@@ -75,7 +75,7 @@ export default function AdminUsers() {
         ))}
       </div>
 
-      <div className="px-5 mt-4 space-y-3">
+      <div className="px-5 mt-4 grid grid-cols-1 xl:grid-cols-2 gap-3">
         {filtered.map((u) => {
           const isSelf = u.id === user?.id;
           const canManageStaff = isSuper || u.role === 'learner';

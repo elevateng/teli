@@ -15,7 +15,7 @@ const headers: Record<string, string> = {
 const token = getToken();
 if (token) headers.Authorization = `Bearer ${token}`;
 
-const API_BASE = 'https://teli-api.onrender.com';
+const API_BASE = (import.meta as any).env?.VITE_API_BASE || 'https://teli-api.onrender.com';
 
 const res = await fetch(`${API_BASE}/api${path}`, { ...options, headers });
 

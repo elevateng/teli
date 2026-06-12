@@ -86,7 +86,7 @@ export default function Explore() {
         <button onClick={() => setShowFilter(true)} className="text-sm text-sub">Sort by: <b className="text-navy">{sortLabel}</b></button>
       </div>
 
-      <div className="px-5 mt-3 space-y-4">
+      <div className="px-5 mt-3 grid grid-cols-1 xl:grid-cols-2 gap-4">
         {!courses ? <Spinner /> : courses.map((c) => (
           <button key={c.id} onClick={() => nav(`/course/${c.slug}`)} className="w-full card p-4 flex gap-4 text-left">
             <CourseThumb icon={c.icon} color={c.color} size={92} rounded="rounded-2xl" image={c.image} />

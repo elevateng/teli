@@ -51,7 +51,7 @@ export default function MyLearning() {
         ))}
       </div>
 
-      <div className="px-5 mt-4 space-y-3">
+      <div className="px-5 mt-4 grid grid-cols-1 xl:grid-cols-2 gap-3">
         {list.length === 0 && (
           <div className="text-center text-sub py-10">
             {tab === 'Saved' ? 'No saved courses yet.' : tab === 'Completed' ? 'No completed courses yet — keep going!' : 'Nothing in progress. Explore courses to begin.'}
@@ -82,7 +82,7 @@ export default function MyLearning() {
             <h2 className="text-[20px] font-extrabold text-navy">Recommended for You</h2>
             <button onClick={() => nav('/explore')} className="text-brand font-bold text-sm">View all</button>
           </div>
-          <div className="px-5 space-y-3">
+          <div className="px-5 grid grid-cols-1 xl:grid-cols-2 gap-3">
             {recommended.map((c) => (
               <div key={c.id} className="card p-4 flex items-center gap-4">
                 <CourseThumb icon={c.icon} color={c.color} size={64} />
