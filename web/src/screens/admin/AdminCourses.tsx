@@ -98,13 +98,13 @@ interface Form {
   summary: string; description: string; color: string; icon: string; outcomes: string[];
   image: string | null;
   instructor: { name: string; title: string; bio: string; avatar: string | null };
-  signatoryName: string; tags: string[];
+  signatoryName: string; signatoryImage: string | null; tags: string[];
   published: boolean; visibility: 'public' | 'private'; cert: { minProgress: string; minQuizScore: string; requireQuizzes: boolean };
 }
 const empty: Form = {
   title: '', category: 'Fundraising', level: 'Beginner', duration: '6 weeks', price: '20000', oldPrice: '',
   summary: '', description: '', color: 'navy', icon: 'target', outcomes: [],
-  image: null, instructor: { name: '', title: 'Instructor', bio: '', avatar: null }, signatoryName: '', tags: [],
+  image: null, instructor: { name: '', title: 'Instructor', bio: '', avatar: null }, signatoryName: '', signatoryImage: null, tags: [],
   published: true, visibility: 'public', cert: { minProgress: '100', minQuizScore: '0', requireQuizzes: true },
 };
 
@@ -123,7 +123,7 @@ function CourseEditor({ id, onClose, onSaved }: { id: number | 'new'; onClose: (
       outcomes: c.outcomes, published: c.published, visibility: c.visibility || 'public',
       image: c.image || null,
       instructor: { name: c.instructor.name, title: c.instructor.title, bio: c.instructor.bio, avatar: c.instructor.avatar },
-      signatoryName: c.signatoryName || '', tags: c.tags || [],
+      signatoryName: c.signatoryName || '', signatoryImage: c.signatoryImage || null, tags: c.tags || [],
       cert: { minProgress: String(c.cert.minProgress), minQuizScore: String(c.cert.minQuizScore), requireQuizzes: c.cert.requireQuizzes },
     }));
   }, [id]);
@@ -138,7 +138,7 @@ function CourseEditor({ id, onClose, onSaved }: { id: number | 'new'; onClose: (
         price: Number(f.price), oldPrice: f.oldPrice ? Number(f.oldPrice) : null,
         summary: f.summary, description: f.description || f.summary, color: f.color, icon: f.icon,
         outcomes: f.outcomes.filter(Boolean), published: f.published, visibility: f.visibility,
-        image: f.image, instructor: f.instructor, signatoryName: f.signatoryName, tags: f.tags,
+        image: f.image, instructor: f.instructor, signatoryName: f.signatoryName, signatoryImage: f.signatoryImage, tags: f.tags,
         cert: { minProgress: Number(f.cert.minProgress), minQuizScore: Number(f.cert.minQuizScore), requireQuizzes: f.cert.requireQuizzes },
       };
       if (id === 'new') await api.post('/admin/courses', payload);
@@ -210,6 +210,19 @@ function CourseEditor({ id, onClose, onSaved }: { id: number | 'new'; onClose: (
 
           <L label="Certificate signatory name (signed on certificates)">
             <input className="field" placeholder="e.g. Ayo Okafor, Director" value={f.signatoryName} onChange={(e) => set('signatoryName', e.target.value)} />
+          </L>
+
+          <L label="Signature image (optional — sits on the signature line, replaces the typed name)">
+            <div className="flex items-center gap-3">
+              {f.signatoryImage
+                ? <img src={f.signatoryImage} alt="signature" className="h-12 w-auto max-w-[160px] object-contain bg-white border border-black/10 rounded-lg px-2" />
+                : <div className="h-12 px-3 flex items-center text-sub text-sm border border-dashed border-black/15 rounded-lg">No signature</div>}
+              <label className="text-brand font-bold text-sm cursor-pointer flex items-center gap-1">
+                <ImageIcon size={15} /> {f.signatoryImage ? 'Replace' : 'Upload'}
+                <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={async (e) => { const fl = e.target.files?.[0]; if (fl) set('signatoryImage', await resizeImage(fl, 600, 'image/png')); }} />
+              </label>
+              {f.signatoryImage && <button onClick={() => set('signatoryImage', null)} className="text-sub text-sm">Remove</button>}
+            </div>
           </L>
 
           <L label="Tags (choose up to 3)">

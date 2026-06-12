@@ -344,6 +344,7 @@ CREATE TABLE IF NOT EXISTS submissions (
   await addColumn('courses', 'instructor_bio', 'instructor_bio TEXT');
   await addColumn('courses', 'instructor_avatar', 'instructor_avatar TEXT'); // data URL
   await addColumn('courses', 'signatory_name', 'signatory_name TEXT'); // name signed on certificates
+  await addColumn('courses', 'signatory_image', 'signatory_image TEXT'); // signature image (data URL)
   await addColumn('courses', 'tags', "tags TEXT NOT NULL DEFAULT '[]'"); // up to 3 tag labels (JSON array)
   // personal (user-owned) coupons, e.g. referral rewards
   await addColumn('coupons', 'user_id', 'user_id INTEGER'); // null = public coupon

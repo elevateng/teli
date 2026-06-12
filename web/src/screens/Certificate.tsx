@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronLeft, Share2, Download, BadgeCheck } from 'lucide-react';
 import { api, Certificate as Cert, shareOrCopy } from '../api';
-import { Spinner, BookMark } from '../components/ui';
+import { Spinner } from '../components/ui';
 
 // Fixed design canvas (A4 landscape ratio 1.414:1). The certificate is always
 // laid out at this size, then scaled down to fit the screen — so the layout
@@ -51,7 +51,8 @@ export default function Certificate() {
       const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([import('html2canvas'), import('jspdf')]);
       // Capture at full design size (strip the on-screen scale during capture).
       el.style.transform = 'none';
-      const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', useCORS: true, windowWidth: CW, windowHeight: CH });
+      // scale 4 → ~4000px wide canvas (~300dpi at A4) so the PDF stays crisp when zoomed.
+      const canvas = await html2canvas(el, { scale: 4, backgroundColor: '#ffffff', useCORS: true, windowWidth: CW, windowHeight: CH });
       el.style.transform = prevTransform;
       const img = canvas.toDataURL('image/png');
       const pdf = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
@@ -114,42 +115,51 @@ function CertBody({ cert }: { cert: Cert }) {
     <div style={{ width: CW, height: CH, padding: 30, boxSizing: 'border-box' }}>
       <div style={{ width: '100%', height: '100%', border: '4px solid #10254a', borderRadius: 8, position: 'relative', boxSizing: 'border-box' }}>
         <div style={{ position: 'absolute', inset: 8, border: '1.5px solid rgba(242,100,25,0.45)', borderRadius: 5, pointerEvents: 'none' }} />
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '44px 70px', boxSizing: 'border-box' }}>
-          {/* header */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <BookMark size={40} />
-            <span style={{ fontWeight: 800, color: '#10254a', fontSize: 26, letterSpacing: '-0.02em' }}>TELI</span>
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px 70px', boxSizing: 'border-box' }}>
+          {/* header — logo as an <img> so it aligns the same in the browser and the PDF */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, height: 44 }}>
+            <img src="/icon-512.png" width={40} height={40} style={{ display: 'block' }} alt="" crossOrigin="anonymous" />
+            <span style={{ fontWeight: 800, color: '#10254a', fontSize: 28, letterSpacing: '-0.02em', lineHeight: 1 }}>TELI</span>
           </div>
           <p style={{ fontSize: 12, letterSpacing: '0.3em', color: '#6b7280', marginTop: 8 }}>THE ELEVATE LEARNING INSTITUTE</p>
 
-          <h2 style={{ fontSize: 44, fontWeight: 800, letterSpacing: '0.18em', color: '#10254a', marginTop: 26 }}>CERTIFICATE</h2>
+          <h2 style={{ fontSize: 44, fontWeight: 800, letterSpacing: '0.18em', color: '#10254a', marginTop: 22 }}>CERTIFICATE</h2>
           <p style={{ fontSize: 14, letterSpacing: '0.4em', color: '#6b7280', marginTop: 4 }}>OF COMPLETION</p>
 
-          <p style={{ fontSize: 15, color: '#6b7280', marginTop: 30 }}>This is to certify that</p>
-          <p style={{ fontSize: 46, fontWeight: 800, color: '#10254a', lineHeight: 1.1, marginTop: 8, fontFamily: 'Georgia, serif' }}>{cert.recipient}</p>
-          <div style={{ width: 320, height: 1, background: 'rgba(0,0,0,0.15)', margin: '16px 0' }} />
+          <p style={{ fontSize: 15, color: '#6b7280', marginTop: 26 }}>This is to certify that</p>
+          <p style={{ fontSize: 44, fontWeight: 800, color: '#10254a', lineHeight: 1.1, marginTop: 8, fontFamily: 'Georgia, serif' }}>{cert.recipient}</p>
+          <div style={{ width: 320, height: 1, background: 'rgba(0,0,0,0.15)', margin: '14px 0' }} />
           <p style={{ fontSize: 15, color: '#6b7280' }}>has successfully completed the course</p>
           <p style={{ fontSize: 26, fontWeight: 800, color: '#10254a', lineHeight: 1.2, marginTop: 8, textAlign: 'center', maxWidth: 720 }}>{cert.title}</p>
 
           {/* seal — in normal flow, centered, cannot overlap */}
-          <div style={{ marginTop: 18, width: 60, height: 60, borderRadius: '50%', background: 'rgba(242,100,25,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <BadgeCheck size={36} color="#F26419" />
+          <div style={{ marginTop: 14, width: 56, height: 56, borderRadius: '50%', background: 'rgba(242,100,25,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <BadgeCheck size={34} color="#F26419" />
           </div>
 
-          {/* footer pinned to bottom */}
+          {/* footer pinned to bottom — value sits ON the line, label below */}
           <div style={{ marginTop: 'auto', width: '100%', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
-            <div style={{ textAlign: 'center', minWidth: 200 }}>
-              <p style={{ fontSize: 16, fontWeight: 700, color: '#10254a', borderTop: '1px solid rgba(0,0,0,0.3)', paddingTop: 6 }}>{cert.issuedAt}</p>
-              <p style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>Date</p>
-            </div>
-            <div style={{ textAlign: 'center', minWidth: 200 }}>
-              <p style={{ fontSize: 18, fontWeight: 700, color: '#10254a', borderTop: '1px solid rgba(0,0,0,0.3)', paddingTop: 6, fontFamily: 'Georgia, serif' }}>{cert.signatory}</p>
-              <p style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>Authorised Signatory</p>
-            </div>
+            <SignBlock label="Date" value={<span style={{ fontSize: 17, fontWeight: 700, color: '#10254a' }}>{cert.issuedAt}</span>} />
+            <SignBlock label="Authorised Signatory" value={
+              cert.signatureImage
+                ? <img src={cert.signatureImage} alt="signature" style={{ display: 'block', height: 48, maxWidth: 230, width: 'auto', objectFit: 'contain', margin: '0 auto' }} />
+                : <span style={{ fontSize: 19, fontWeight: 700, color: '#10254a', fontFamily: 'Georgia, serif' }}>{cert.signatory}</span>
+            } />
           </div>
-          <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 12 }}>An initiative of Elevate Development Foundation · Lagos, Nigeria</p>
+          <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 12 }}>An initiative of Elevate Development Foundation</p>
         </div>
       </div>
+    </div>
+  );
+}
+
+// A signature/date block: the value rests on a line, with a small caption beneath the line.
+function SignBlock({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div style={{ width: 250, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <div style={{ height: 50, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: 4 }}>{value}</div>
+      <div style={{ width: '100%', height: 1, background: 'rgba(0,0,0,0.35)' }} />
+      <p style={{ fontSize: 11, color: '#6b7280', marginTop: 4 }}>{label}</p>
     </div>
   );
 }

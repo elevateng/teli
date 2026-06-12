@@ -163,6 +163,7 @@ async function getCourseDetail(slugOrId, userId) {
       avatar: course.instructor_avatar || null,
     },
     signatoryName: course.signatory_name || course.instructor_name || 'TELI Faculty',
+    signatoryImage: course.signatory_image || null,
     tags: JSON.parse(course.tags || '[]'),
     createdBy: course.created_by || null,
     outcomes: JSON.parse(course.outcomes || '[]'),
@@ -640,12 +641,12 @@ app.get('/api/me/achievements', authOptional, authRequired, ah(async (req, res) 
 
 app.get('/api/me/certificates', authOptional, authRequired, ah(async (req, res) => {
   const rows = await db.prepare(`
-    SELECT c.issued_at, co.title, co.slug, co.category, co.signatory_name, co.instructor_name, co.provider FROM certificates c
+    SELECT c.issued_at, co.title, co.slug, co.category, co.signatory_name, co.signatory_image, co.instructor_name, co.provider FROM certificates c
     JOIN courses co ON co.id = c.course_id WHERE c.user_id = ? ORDER BY c.issued_at DESC, c.id DESC
   `).all(req.user.id);
   res.json({ certificates: rows.map((r) => ({
     title: r.title, slug: r.slug, category: r.category, issuedAt: r.issued_at, recipient: req.user.full_name,
-    signatory: r.signatory_name || r.instructor_name || 'TELI Faculty', provider: r.provider,
+    signatory: r.signatory_name || r.instructor_name || 'TELI Faculty', signatureImage: r.signatory_image || null, provider: r.provider,
   })) });
 }));
 
@@ -723,6 +724,7 @@ async function applyCourseExtras(courseId, b) {
       .run(b.instructor.name || null, b.instructor.title || null, b.instructor.bio || null, b.instructor.avatar || null, courseId);
   }
   if (b.signatoryName !== undefined) await db.prepare('UPDATE courses SET signatory_name=? WHERE id=?').run(b.signatoryName || null, courseId);
+  if (b.signatoryImage !== undefined) await db.prepare('UPDATE courses SET signatory_image=? WHERE id=?').run(b.signatoryImage || null, courseId);
   if (b.tags !== undefined) {
     const tags = Array.isArray(b.tags) ? b.tags.map((t) => String(t).trim()).filter(Boolean).slice(0, 3) : [];
     await db.prepare('UPDATE courses SET tags=? WHERE id=?').run(JSON.stringify(tags), courseId);

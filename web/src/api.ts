@@ -32,8 +32,9 @@ export const api = {
   del: <T,>(p: string) => request<T>(p, { method: 'DELETE' }),
 };
 
-// Resize an image File to a small square-ish JPEG data URL (for avatars).
-export async function resizeImage(file: File, max = 256): Promise<string> {
+// Resize an image File to a small data URL. Defaults to JPEG (for avatars/photos);
+// pass type 'image/png' to preserve transparency (e.g. signatures).
+export async function resizeImage(file: File, max = 256, type: 'image/jpeg' | 'image/png' = 'image/jpeg'): Promise<string> {
   const dataUrl: string = await new Promise((res, rej) => {
     const r = new FileReader(); r.onload = () => res(r.result as string); r.onerror = rej; r.readAsDataURL(file);
   });
@@ -45,7 +46,7 @@ export async function resizeImage(file: File, max = 256): Promise<string> {
   const h = Math.max(1, Math.round(img.height * scale));
   const c = document.createElement('canvas'); c.width = w; c.height = h;
   c.getContext('2d')!.drawImage(img, 0, 0, w, h);
-  return c.toDataURL('image/jpeg', 0.85);
+  return type === 'image/png' ? c.toDataURL('image/png') : c.toDataURL('image/jpeg', 0.85);
 }
 
 // read a File as a data URL and upload it; returns the served path
@@ -128,7 +129,7 @@ export interface CourseDetail extends Omit<CourseCard, 'progress'> {
   provider: string; description: string; outcomes: string[];
   moduleCount: number; lessonCount: number; estimatedTime: string;
   modules: ModuleNode[]; reviews: Review[]; myReview: { rating: number; body: string } | null;
-  instructor: Instructor; signatoryName: string; createdBy: number | null; tags: string[];
+  instructor: Instructor; signatoryName: string; signatoryImage?: string | null; createdBy: number | null; tags: string[];
   myGroup?: CourseGroup | null;
   lastAccessed: string | null; progress: number; completedLessons: number; totalLessons: number;
   published: boolean; visibility: 'public' | 'private'; cert: CertConditions;
@@ -148,7 +149,7 @@ export interface Dashboard {
 }
 
 export interface Achievement { code: string; title: string; detail: string; icon: string; earned_at: string; }
-export interface Certificate { title: string; slug: string; category: string; issuedAt: string; recipient: string; signatory: string; provider: string; }
+export interface Certificate { title: string; slug: string; category: string; issuedAt: string; recipient: string; signatory: string; signatureImage?: string | null; provider: string; }
 
 export interface QuizResult {
   score: number; total: number; percent: number; passed: boolean; timeTaken: string | null;
