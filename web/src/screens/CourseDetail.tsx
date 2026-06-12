@@ -109,6 +109,17 @@ export default function CourseDetail() {
       )}
 
       {course.enrolled && (
+        <button onClick={() => nav(`/community/${course.slug}`)} className="mx-5 mt-3 w-full card p-4 flex items-center gap-3 text-left">
+          <span className="w-11 h-11 rounded-2xl bg-brand-50 flex items-center justify-center"><Users size={20} className="text-brand" /></span>
+          <div className="flex-1">
+            <p className="font-bold text-navy leading-tight">Course community</p>
+            <p className="text-xs text-sub">Discuss, ask questions & share wins with your classmates</p>
+          </div>
+          <ArrowRight size={18} className="text-sub" />
+        </button>
+      )}
+
+      {course.enrolled && (
         <div className="mx-5 mt-3">
           <h2 className="font-extrabold text-navy text-lg mb-2 flex items-center gap-2"><ClipboardList size={18} className="text-brand" /> Assignments</h2>
           <LearnerAssignments slug={course.slug} />

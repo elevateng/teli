@@ -121,6 +121,7 @@ export default function App() {
         <Route path="/home" element={<Home />} />
         <Route path="/explore" element={<Explore />} />
         <Route path="/community" element={<Community />} />
+        <Route path="/community/:slug" element={<Community />} />
         <Route path="/learning" element={<MyLearning />} />
         <Route path="/profile" element={<Profile />} />
       </Route>

@@ -351,6 +351,8 @@ CREATE TABLE IF NOT EXISTS submissions (
   await addColumn('coupons', 'label', 'label TEXT');
   // reviews tied to a user (one per user per course)
   await addColumn('reviews', 'user_id', 'user_id INTEGER');
+  // community posts: topic/category for course-scoped feeds
+  await addColumn('community_posts', 'category', "category TEXT NOT NULL DEFAULT 'Discussion'");
   // tickets: trackable reference + optional course link
   await addColumn('tickets', 'reference', 'reference TEXT');
   await addColumn('tickets', 'course_id', 'course_id INTEGER');

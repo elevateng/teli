@@ -195,9 +195,9 @@ export interface AppNotification {
   id: number; type: string; title: string; body: string; link: string | null; read: boolean; at: string;
 }
 
-export interface PostAuthor { id: number; name: string; avatar: string | null; role: Role; staff: boolean; }
+export interface PostAuthor { id: number; name: string; avatar: string | null; role: Role; staff: boolean; roleLabel?: string; }
 export interface CommunityPost {
-  id: number; body: string; image: string | null; pinned: boolean; createdAt: string;
+  id: number; courseId?: number; body: string; image: string | null; category: string; pinned: boolean; createdAt: string;
   author: PostAuthor | null; likes: number; liked: boolean; comments: number;
 }
 export interface CommunityComment {

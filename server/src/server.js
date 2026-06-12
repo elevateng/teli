@@ -1739,8 +1739,22 @@ app.get('/api/admin/email-log', authOptional, requireRole('admin', 'super_admin'
   res.json({ enabled: emailEnabled, messages: sentMail.slice(0, 50) });
 });
 
-// ----------------------------- community wall -----------------------------
+// --------------------------- course communities ---------------------------
+// Each course has its own community space (Circle-style). Only enrolled
+// learners + staff can view/post. Posts carry a category and author role badge.
 const isStaffRole = (r) => r === 'admin' || r === 'super_admin';
+const ROLE_LABEL = { super_admin: 'Super Admin', admin: 'Admin', learner: 'Learner' };
+const POST_CATEGORIES = ['Discussion', 'Question', 'Win', 'Announcement'];
+function authorView(a) {
+  if (!a) return null;
+  return { id: a.id, name: a.full_name, avatar: a.avatar || null, role: a.role, staff: isStaffRole(a.role), roleLabel: ROLE_LABEL[a.role] || 'Learner' };
+}
+async function canAccessCommunity(user, course) {
+  if (!user || !course) return false;
+  if (isStaffRole(user.role)) return true; // staff moderate every space
+  const enr = await db.prepare('SELECT 1 FROM enrollments WHERE user_id=? AND course_id=? AND enrolled=1').get(user.id, course.id);
+  return !!enr;
+}
 
 async function postView(p, userId) {
   const author = await db.prepare('SELECT id, full_name, avatar, role FROM users WHERE id = ?').get(p.user_id);
@@ -1748,64 +1762,97 @@ async function postView(p, userId) {
   const comments = (await db.prepare('SELECT COUNT(*) c FROM community_comments WHERE post_id = ?').get(p.id)).c;
   const liked = userId ? !!(await db.prepare('SELECT 1 FROM community_likes WHERE post_id = ? AND user_id = ?').get(p.id, userId)) : false;
   return {
-    id: p.id, body: p.body, image: p.image || null, pinned: !!p.pinned, createdAt: p.created_at,
-    author: author ? { id: author.id, name: author.full_name, avatar: author.avatar || null, role: author.role, staff: isStaffRole(author.role) } : null,
-    likes, liked, comments,
+    id: p.id, courseId: p.course_id, body: p.body, image: p.image || null,
+    category: p.category || 'Discussion', pinned: !!p.pinned, createdAt: p.created_at,
+    author: authorView(author), likes, liked, comments,
   };
 }
 
-// feed — newest first, pinned on top
-app.get('/api/community', authOptional, authRequired, ah(async (req, res) => {
-  const rows = await db.prepare('SELECT * FROM community_posts ORDER BY pinned DESC, id DESC LIMIT 100').all();
+// list the course communities the signed-in user can access (hub)
+app.get('/api/me/communities', authOptional, authRequired, ah(async (req, res) => {
+  const courses = isStaffRole(req.user.role)
+    ? await db.prepare('SELECT * FROM courses ORDER BY title').all()
+    : await db.prepare(`SELECT c.* FROM courses c JOIN enrollments e ON e.course_id=c.id
+        WHERE e.user_id=? AND e.enrolled=1 ORDER BY c.title`).all(req.user.id);
+  const out = [];
+  for (const c of courses) {
+    const stats = await db.prepare('SELECT COUNT(*) n, MAX(created_at) last FROM community_posts WHERE course_id=?').get(c.id);
+    out.push({ slug: c.slug, title: c.title, icon: c.icon, color: c.color, image: c.image || null,
+      posts: stats.n || 0, lastActivity: stats.last || null });
+  }
+  res.json({ communities: out });
+}));
+
+// feed for a course (optional ?category=)
+app.get('/api/courses/:slug/community', authOptional, authRequired, ah(async (req, res) => {
+  const course = await loadCourseOr404(req.params.slug);
+  if (!course) return res.status(404).json({ error: 'Course not found' });
+  if (!(await canAccessCommunity(req.user, course))) return res.status(403).json({ error: 'Enrol in this course to join its community' });
+  const cat = req.query.category && POST_CATEGORIES.includes(req.query.category) ? req.query.category : null;
+  const rows = cat
+    ? await db.prepare('SELECT * FROM community_posts WHERE course_id=? AND category=? ORDER BY pinned DESC, id DESC LIMIT 100').all(course.id, cat)
+    : await db.prepare('SELECT * FROM community_posts WHERE course_id=? ORDER BY pinned DESC, id DESC LIMIT 100').all(course.id);
   const posts = [];
   for (const p of rows) posts.push(await postView(p, req.user.id));
-  res.json({ posts });
+  res.json({ course: { slug: course.slug, title: course.title }, categories: POST_CATEGORIES, posts });
 }));
 
-// single post with its comments
-app.get('/api/community/:id', authOptional, authRequired, ah(async (req, res) => {
-  const p = await db.prepare('SELECT * FROM community_posts WHERE id = ?').get(req.params.id);
-  if (!p) return res.status(404).json({ error: 'Post not found' });
-  const post = await postView(p, req.user.id);
-  const crows = await db.prepare('SELECT * FROM community_comments WHERE post_id = ? ORDER BY id ASC').all(p.id);
-  const comments = [];
-  for (const c of crows) {
-    const a = await db.prepare('SELECT id, full_name, avatar, role FROM users WHERE id = ?').get(c.user_id);
-    comments.push({ id: c.id, body: c.body, createdAt: c.created_at, userId: c.user_id,
-      author: a ? { id: a.id, name: a.full_name, avatar: a.avatar || null, role: a.role, staff: isStaffRole(a.role) } : null });
-  }
-  res.json({ post, comments });
-}));
-
-// create a post (any signed-in user)
-app.post('/api/community', authOptional, authRequired, ah(async (req, res) => {
+// create a post in a course community
+app.post('/api/courses/:slug/community', authOptional, authRequired, ah(async (req, res) => {
+  const course = await loadCourseOr404(req.params.slug);
+  if (!course) return res.status(404).json({ error: 'Course not found' });
+  if (!(await canAccessCommunity(req.user, course))) return res.status(403).json({ error: 'Enrol in this course to post' });
   const body = String(req.body?.body || '').trim();
   const image = req.body?.image || null;
+  let category = POST_CATEGORIES.includes(req.body?.category) ? req.body.category : 'Discussion';
+  if (category === 'Announcement' && !isStaffRole(req.user.role)) category = 'Discussion'; // only staff announce
   if (!body && !image) return res.status(400).json({ error: 'Write something to post' });
   if (body.length > 5000) return res.status(400).json({ error: 'Post is too long' });
-  const r = await db.prepare('INSERT INTO community_posts (user_id, body, image) VALUES (?,?,?)').run(req.user.id, body, image);
+  const r = await db.prepare('INSERT INTO community_posts (user_id, course_id, body, image, category) VALUES (?,?,?,?,?)')
+    .run(req.user.id, course.id, body, image, category);
   const p = await db.prepare('SELECT * FROM community_posts WHERE id = ?').get(r.lastInsertRowid);
   res.json({ post: await postView(p, req.user.id) });
 }));
 
+// helper: load a post, its course, and enforce access
+async function postGuard(req, res) {
+  const p = await db.prepare('SELECT * FROM community_posts WHERE id = ?').get(req.params.id);
+  if (!p) { res.status(404).json({ error: 'Post not found' }); return null; }
+  const course = await db.prepare('SELECT * FROM courses WHERE id = ?').get(p.course_id);
+  if (!(await canAccessCommunity(req.user, course))) { res.status(403).json({ error: 'No access to this community' }); return null; }
+  return { p, course };
+}
+
+// single post with comments
+app.get('/api/community/:id', authOptional, authRequired, ah(async (req, res) => {
+  const ctx = await postGuard(req, res); if (!ctx) return;
+  const post = await postView(ctx.p, req.user.id);
+  const crows = await db.prepare('SELECT * FROM community_comments WHERE post_id = ? ORDER BY id ASC').all(ctx.p.id);
+  const comments = [];
+  for (const c of crows) {
+    const a = await db.prepare('SELECT id, full_name, avatar, role FROM users WHERE id = ?').get(c.user_id);
+    comments.push({ id: c.id, body: c.body, createdAt: c.created_at, userId: c.user_id, author: authorView(a) });
+  }
+  res.json({ post, comments });
+}));
+
 // delete a post (own, or staff moderation)
 app.delete('/api/community/:id', authOptional, authRequired, ah(async (req, res) => {
-  const p = await db.prepare('SELECT * FROM community_posts WHERE id = ?').get(req.params.id);
-  if (!p) return res.status(404).json({ error: 'Post not found' });
-  if (p.user_id !== req.user.id && !isStaffRole(req.user.role)) return res.status(403).json({ error: 'You can only delete your own posts' });
-  await db.prepare('DELETE FROM community_posts WHERE id = ?').run(p.id);
+  const ctx = await postGuard(req, res); if (!ctx) return;
+  if (ctx.p.user_id !== req.user.id && !isStaffRole(req.user.role)) return res.status(403).json({ error: 'You can only delete your own posts' });
+  await db.prepare('DELETE FROM community_posts WHERE id = ?').run(ctx.p.id);
   res.json({ ok: true });
 }));
 
 // like / unlike
 app.post('/api/community/:id/like', authOptional, authRequired, ah(async (req, res) => {
-  const p = await db.prepare('SELECT * FROM community_posts WHERE id = ?').get(req.params.id);
-  if (!p) return res.status(404).json({ error: 'Post not found' });
+  const ctx = await postGuard(req, res); if (!ctx) return;
+  const p = ctx.p;
   const existing = await db.prepare('SELECT 1 FROM community_likes WHERE post_id = ? AND user_id = ?').get(p.id, req.user.id);
   if (existing) await db.prepare('DELETE FROM community_likes WHERE post_id = ? AND user_id = ?').run(p.id, req.user.id);
   else {
     await db.prepare('INSERT INTO community_likes (post_id, user_id) VALUES (?,?)').run(p.id, req.user.id);
-    if (p.user_id !== req.user.id) await notify(p.user_id, 'community', `${firstName(req.user.full_name)} liked your post`, '', '/community');
+    if (p.user_id !== req.user.id) await notify(p.user_id, 'community', `${firstName(req.user.full_name)} liked your post`, ctx.course.title, `/community/${ctx.course.slug}`);
   }
   res.json({ post: await postView(p, req.user.id) });
 }));
@@ -1820,12 +1867,11 @@ app.post('/api/community/:id/pin', authOptional, requireRole('admin', 'super_adm
 
 // add a comment
 app.post('/api/community/:id/comments', authOptional, authRequired, ah(async (req, res) => {
-  const p = await db.prepare('SELECT * FROM community_posts WHERE id = ?').get(req.params.id);
-  if (!p) return res.status(404).json({ error: 'Post not found' });
+  const ctx = await postGuard(req, res); if (!ctx) return;
   const body = String(req.body?.body || '').trim();
   if (!body) return res.status(400).json({ error: 'Write a comment' });
-  await db.prepare('INSERT INTO community_comments (post_id, user_id, body) VALUES (?,?,?)').run(p.id, req.user.id, body);
-  if (p.user_id !== req.user.id) await notify(p.user_id, 'community', `${firstName(req.user.full_name)} commented on your post`, body.slice(0, 80), '/community');
+  await db.prepare('INSERT INTO community_comments (post_id, user_id, body) VALUES (?,?,?)').run(ctx.p.id, req.user.id, body);
+  if (ctx.p.user_id !== req.user.id) await notify(ctx.p.user_id, 'community', `${firstName(req.user.full_name)} commented on your post`, body.slice(0, 80), `/community/${ctx.course.slug}`);
   res.json({ ok: true });
 }));
 
