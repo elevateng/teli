@@ -841,6 +841,203 @@ app.post('/api/admin/groups/:gid/leader', authOptional, requireRole('admin', 'su
   res.json({ group: await groupView(ctx.g) });
 }));
 
+// ----------------------------- assignments -----------------------------
+function assignmentView(a) {
+  return { id: a.id, courseId: a.course_id, title: a.title, instructions: a.instructions || '',
+    format: a.format, maxPoints: a.max_points, dueAt: a.due_at || null, createdAt: a.created_at };
+}
+async function enrolledUserIds(courseId) {
+  const rows = await db.prepare('SELECT user_id FROM enrollments WHERE course_id = ? AND enrolled = 1').all(courseId);
+  return rows.map((r) => r.user_id);
+}
+
+// admin: list assignments (with submission stats)
+app.get('/api/admin/courses/:id/assignments', authOptional, requireRole('admin', 'super_admin'), ah(async (req, res) => {
+  const course = await loadCourseOr404(req.params.id);
+  if (!course) return res.status(404).json({ error: 'Course not found' });
+  if (!canManageCourse(req.user, course)) return res.status(403).json({ error: 'You can only manage your own courses' });
+  const enrolled = (await enrolledUserIds(course.id)).length;
+  const rows = await db.prepare('SELECT * FROM assignments WHERE course_id = ? ORDER BY id DESC').all(course.id);
+  const assignments = [];
+  for (const a of rows) {
+    const submitted = (await db.prepare('SELECT COUNT(*) c FROM submissions WHERE assignment_id = ?').get(a.id)).c;
+    const graded = (await db.prepare("SELECT COUNT(*) c FROM submissions WHERE assignment_id = ? AND status = 'graded'").get(a.id)).c;
+    assignments.push({ ...assignmentView(a), enrolled, submitted, graded });
+  }
+  res.json({ assignments });
+}));
+
+// admin: create assignment + notify enrolled learners
+app.post('/api/admin/courses/:id/assignments', authOptional, requireRole('admin', 'super_admin'), ah(async (req, res) => {
+  const course = await loadCourseOr404(req.params.id);
+  if (!course) return res.status(404).json({ error: 'Course not found' });
+  if (!canManageCourse(req.user, course)) return res.status(403).json({ error: 'You can only manage your own courses' });
+  const b = req.body || {};
+  const title = String(b.title || '').trim();
+  if (!title) return res.status(400).json({ error: 'Enter an assignment title' });
+  const format = ['text', 'file', 'link'].includes(b.format) ? b.format : 'text';
+  const r = await db.prepare('INSERT INTO assignments (course_id,title,instructions,format,max_points,due_at,created_by) VALUES (?,?,?,?,?,?,?)')
+    .run(course.id, title, b.instructions || '', format, Number(b.maxPoints) || 100, b.dueAt || null, req.user.id);
+  for (const uid of await enrolledUserIds(course.id)) {
+    await notify(uid, 'assignment', `New assignment: ${title}`, course.title, `/course/${course.slug}`);
+  }
+  const a = await db.prepare('SELECT * FROM assignments WHERE id = ?').get(r.lastInsertRowid);
+  res.json({ assignment: assignmentView(a) });
+}));
+
+async function assignmentGuard(req, res) {
+  const a = await db.prepare('SELECT * FROM assignments WHERE id = ?').get(req.params.aid);
+  if (!a) { res.status(404).json({ error: 'Assignment not found' }); return null; }
+  const course = await db.prepare('SELECT * FROM courses WHERE id = ?').get(a.course_id);
+  if (!canManageCourse(req.user, course)) { res.status(403).json({ error: 'You can only manage your own courses' }); return null; }
+  return { a, course };
+}
+
+app.put('/api/admin/assignments/:aid', authOptional, requireRole('admin', 'super_admin'), ah(async (req, res) => {
+  const ctx = await assignmentGuard(req, res); if (!ctx) return;
+  const b = req.body || {};
+  const format = ['text', 'file', 'link'].includes(b.format) ? b.format : ctx.a.format;
+  await db.prepare('UPDATE assignments SET title=?, instructions=?, format=?, max_points=?, due_at=? WHERE id=?')
+    .run(String(b.title || ctx.a.title), b.instructions ?? ctx.a.instructions, format, Number(b.maxPoints) || ctx.a.max_points, b.dueAt ?? ctx.a.due_at, ctx.a.id);
+  const a = await db.prepare('SELECT * FROM assignments WHERE id = ?').get(ctx.a.id);
+  res.json({ assignment: assignmentView(a) });
+}));
+
+app.delete('/api/admin/assignments/:aid', authOptional, requireRole('admin', 'super_admin'), ah(async (req, res) => {
+  const ctx = await assignmentGuard(req, res); if (!ctx) return;
+  await db.prepare('DELETE FROM assignments WHERE id = ?').run(ctx.a.id);
+  res.json({ ok: true });
+}));
+
+// admin: submission tracker — every enrolled learner + their submission state
+app.get('/api/admin/assignments/:aid/submissions', authOptional, requireRole('admin', 'super_admin'), ah(async (req, res) => {
+  const ctx = await assignmentGuard(req, res); if (!ctx) return;
+  const learners = await db.prepare(`
+    SELECT u.id, u.full_name, u.avatar FROM enrollments e JOIN users u ON u.id = e.user_id
+    WHERE e.course_id = ? AND e.enrolled = 1 ORDER BY u.full_name
+  `).all(ctx.course.id);
+  const rows = [];
+  for (const u of learners) {
+    const s = await db.prepare('SELECT * FROM submissions WHERE assignment_id = ? AND user_id = ?').get(ctx.a.id, u.id);
+    rows.push({
+      userId: u.id, name: u.full_name, avatar: u.avatar || null,
+      submission: s ? {
+        id: s.id, body: s.body || '', fileUrl: s.file_url || null, linkUrl: s.link_url || null,
+        status: s.status, grade: s.grade, feedback: s.feedback || '', submittedAt: s.submitted_at,
+      } : null,
+    });
+  }
+  res.json({ assignment: assignmentView(ctx.a), submissions: rows });
+}));
+
+// admin: grade a submission + notify learner
+app.post('/api/admin/submissions/:sid/grade', authOptional, requireRole('admin', 'super_admin'), ah(async (req, res) => {
+  const s = await db.prepare('SELECT * FROM submissions WHERE id = ?').get(req.params.sid);
+  if (!s) return res.status(404).json({ error: 'Submission not found' });
+  const a = await db.prepare('SELECT * FROM assignments WHERE id = ?').get(s.assignment_id);
+  const course = await db.prepare('SELECT * FROM courses WHERE id = ?').get(a.course_id);
+  if (!canManageCourse(req.user, course)) return res.status(403).json({ error: 'You can only manage your own courses' });
+  const grade = Math.max(0, Math.min(Number(req.body?.grade) || 0, a.max_points));
+  const feedback = String(req.body?.feedback || '');
+  await db.prepare("UPDATE submissions SET status='graded', grade=?, feedback=?, graded_at=datetime('now'), graded_by=? WHERE id=?")
+    .run(grade, feedback, req.user.id, s.id);
+  await notify(s.user_id, 'assignment', `Your assignment was graded: ${a.title}`, `Score: ${grade}/${a.max_points}`, `/course/${course.slug}`);
+  res.json({ ok: true });
+}));
+
+// admin: per-course analytics dashboard
+app.get('/api/admin/courses/:id/analytics', authOptional, requireRole('admin', 'super_admin'), ah(async (req, res) => {
+  const course = await loadCourseOr404(req.params.id);
+  if (!course) return res.status(404).json({ error: 'Course not found' });
+  if (!canManageCourse(req.user, course)) return res.status(403).json({ error: 'You can only manage your own courses' });
+  const ids = await enrolledUserIds(course.id);
+  const enrolled = ids.length;
+  const totalLessons = (await db.prepare('SELECT COUNT(*) c FROM lessons l JOIN modules m ON m.id=l.module_id WHERE m.course_id=?').get(course.id)).c;
+
+  let progressSum = 0, completedCount = 0;
+  const perLearner = [];
+  for (const uid of ids) {
+    const done = (await db.prepare(`
+      SELECT COUNT(*) c FROM lesson_progress lp JOIN lessons l ON l.id=lp.lesson_id JOIN modules m ON m.id=l.module_id
+      WHERE lp.user_id=? AND m.course_id=? AND lp.completed=1`).get(uid, course.id)).c;
+    const pct = totalLessons ? Math.round((done / totalLessons) * 100) : 0;
+    progressSum += pct;
+    if (pct >= 100) completedCount += 1;
+    const u = await db.prepare('SELECT full_name, avatar FROM users WHERE id=?').get(uid);
+    perLearner.push({ userId: uid, name: u?.full_name, avatar: u?.avatar || null, progress: pct });
+  }
+  perLearner.sort((a, b) => b.progress - a.progress);
+
+  const quizAgg = await db.prepare(`
+    SELECT AVG(CAST(score AS REAL)/total*100) avg, COUNT(*) n FROM quiz_attempts qa
+    JOIN lessons l ON l.id=qa.lesson_id JOIN modules m ON m.id=l.module_id WHERE m.course_id=?`).get(course.id);
+  const certs = (await db.prepare('SELECT COUNT(*) c FROM certificates WHERE course_id=?').get(course.id)).c;
+  const reviewAgg = await db.prepare('SELECT AVG(rating) avg, COUNT(*) n FROM reviews WHERE course_id=?').get(course.id);
+  const assignmentCount = (await db.prepare('SELECT COUNT(*) c FROM assignments WHERE course_id=?').get(course.id)).c;
+  const subAgg = await db.prepare(`
+    SELECT COUNT(*) subs FROM submissions s JOIN assignments a ON a.id=s.assignment_id WHERE a.course_id=?`).get(course.id);
+  const expectedSubs = assignmentCount * enrolled;
+
+  res.json({
+    course: { id: course.id, title: course.title, slug: course.slug },
+    enrolled, completedCount,
+    avgProgress: enrolled ? Math.round(progressSum / enrolled) : 0,
+    avgQuizScore: quizAgg?.avg != null ? Math.round(quizAgg.avg) : null,
+    quizAttempts: quizAgg?.n || 0,
+    certificates: certs,
+    avgRating: reviewAgg?.avg != null ? Math.round(reviewAgg.avg * 10) / 10 : null,
+    reviewCount: reviewAgg?.n || 0,
+    assignmentCount,
+    submissionRate: expectedSubs ? Math.round((subAgg.subs / expectedSubs) * 100) : null,
+    learners: perLearner,
+  });
+}));
+
+// ---- learner-facing assignments ----
+// list assignments for a course the learner is enrolled in (+ my submission)
+app.get('/api/courses/:slug/assignments', authOptional, authRequired, ah(async (req, res) => {
+  const course = await loadCourseOr404(req.params.slug);
+  if (!course) return res.status(404).json({ error: 'Course not found' });
+  const rows = await db.prepare('SELECT * FROM assignments WHERE course_id = ? ORDER BY id DESC').all(course.id);
+  const assignments = [];
+  for (const a of rows) {
+    const s = await db.prepare('SELECT * FROM submissions WHERE assignment_id = ? AND user_id = ?').get(a.id, req.user.id);
+    assignments.push({ ...assignmentView(a), mySubmission: s ? {
+      id: s.id, body: s.body || '', fileUrl: s.file_url || null, linkUrl: s.link_url || null,
+      status: s.status, grade: s.grade, feedback: s.feedback || '', submittedAt: s.submitted_at,
+    } : null });
+  }
+  res.json({ assignments });
+}));
+
+// learner submits / resubmits
+app.post('/api/assignments/:aid/submit', authOptional, authRequired, ah(async (req, res) => {
+  const a = await db.prepare('SELECT * FROM assignments WHERE id = ?').get(req.params.aid);
+  if (!a) return res.status(404).json({ error: 'Assignment not found' });
+  const enrolled = await db.prepare('SELECT 1 FROM enrollments WHERE user_id=? AND course_id=? AND enrolled=1').get(req.user.id, a.course_id);
+  if (!enrolled) return res.status(403).json({ error: 'Enrol in this course to submit' });
+  const b = req.body || {};
+  const body = b.body != null ? String(b.body) : null;
+  const fileUrl = b.fileUrl || null;
+  const linkUrl = b.linkUrl || null;
+  if (!body && !fileUrl && !linkUrl) return res.status(400).json({ error: 'Add your submission' });
+  const existing = await db.prepare('SELECT * FROM submissions WHERE assignment_id=? AND user_id=?').get(a.id, req.user.id);
+  if (existing) {
+    await db.prepare("UPDATE submissions SET body=?, file_url=?, link_url=?, status='submitted', submitted_at=datetime('now') WHERE id=?")
+      .run(body, fileUrl, linkUrl, existing.id);
+  } else {
+    await db.prepare('INSERT INTO submissions (assignment_id,user_id,body,file_url,link_url) VALUES (?,?,?,?,?)')
+      .run(a.id, req.user.id, body, fileUrl, linkUrl);
+  }
+  const course = await db.prepare('SELECT * FROM courses WHERE id=?').get(a.course_id);
+  // notify the course creator + super admins
+  const staff = await db.prepare("SELECT id FROM users WHERE role='super_admin'").all();
+  const ids = new Set(staff.map((s) => s.id));
+  if (course.created_by) ids.add(course.created_by);
+  for (const uid of ids) await notify(uid, 'assignment', `${firstName(req.user.full_name)} submitted: ${a.title}`, course.title, `/admin/courses/${course.slug}/assignments`);
+  res.json({ ok: true });
+}));
+
 app.put('/api/admin/courses/:id', authOptional, requireRole('admin', 'super_admin'), ah(async (req, res) => {
   const course = await db.prepare('SELECT * FROM courses WHERE id = ? OR slug = ?').get(req.params.id, req.params.id);
   if (!course) return res.status(404).json({ error: 'Course not found' });

@@ -92,6 +92,26 @@ export interface Instructor { name: string; title: string; bio: string; avatar: 
 export interface GroupMember { userId: number; name: string; avatar: string | null; leader: boolean; }
 export interface CourseGroup { id: number; name: string; courseId?: number; members: GroupMember[]; }
 
+export type AssignmentFormat = 'text' | 'file' | 'link';
+export interface Submission {
+  id: number; body: string; fileUrl: string | null; linkUrl: string | null;
+  status: 'submitted' | 'graded'; grade: number | null; feedback: string; submittedAt: string;
+}
+export interface Assignment {
+  id: number; courseId: number; title: string; instructions: string; format: AssignmentFormat;
+  maxPoints: number; dueAt: string | null; createdAt: string;
+  mySubmission?: Submission | null;
+  enrolled?: number; submitted?: number; graded?: number;
+}
+export interface SubmissionRow { userId: number; name: string; avatar: string | null; submission: Submission | null; }
+export interface CourseAnalytics {
+  course: { id: number; title: string; slug: string };
+  enrolled: number; completedCount: number; avgProgress: number;
+  avgQuizScore: number | null; quizAttempts: number; certificates: number;
+  avgRating: number | null; reviewCount: number; assignmentCount: number; submissionRate: number | null;
+  learners: { userId: number; name: string; avatar: string | null; progress: number }[];
+}
+
 export type LessonKind = 'reading' | 'video' | 'activity' | 'quiz';
 export interface LessonNode {
   id: number; title: string; kind: LessonKind;

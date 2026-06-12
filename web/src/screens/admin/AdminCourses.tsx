@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Pencil, Trash2, X, Search, ListTree, Eye, EyeOff, Award, Ticket, Copy, Check, Power, Image as ImageIcon, Tag, Users, Crown, UserPlus } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, Search, ListTree, Eye, EyeOff, Award, Ticket, Copy, Check, Power, Image as ImageIcon, Tag, Users, Crown, UserPlus, ClipboardList, BarChart3 } from 'lucide-react';
 import { api, CourseCard, CourseDetail, AccessCode, CourseGroup, resizeImage, naira } from '../../api';
 import { StatusBar, CourseThumb, Spinner, Avatar } from '../../components/ui';
 
@@ -72,6 +72,14 @@ export default function AdminCourses() {
               <button onClick={() => setGroupsFor(c)}
                 className="flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-black/10 text-navy font-bold text-sm">
                 <Users size={16} /> Teams
+              </button>
+              <button onClick={() => nav(`/admin/courses/${c.slug}/assignments`)}
+                className="flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-black/10 text-navy font-bold text-sm">
+                <ClipboardList size={16} /> Assignments
+              </button>
+              <button onClick={() => nav(`/admin/courses/${c.slug}/analytics`)}
+                className="flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-black/10 text-navy font-bold text-sm">
+                <BarChart3 size={16} /> Analytics
               </button>
             </div>
           </div>

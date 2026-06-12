@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ChevronLeft, Share2, Bookmark, Clock, SignalHigh, PlayCircle, Star, CheckCircle2,
-  ChevronDown, FileText, HelpCircle, Award, Play, Lock, ArrowRight, Circle, Users, Crown,
+  ChevronDown, FileText, HelpCircle, Award, Play, Lock, ArrowRight, Circle, Users, Crown, ClipboardList,
 } from 'lucide-react';
 import { api, CourseDetail as CD, LessonNode, naira, shareOrCopy } from '../api';
 import { CourseThumb, ProgressBar, Spinner, Wordmark, Avatar } from '../components/ui';
+import { LearnerAssignments } from '../components/Assignments';
 
 const TABS = ['Overview', 'Curriculum', 'Instructor', 'Reviews'] as const;
 
@@ -104,6 +105,13 @@ export default function CourseDetail() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {course.enrolled && (
+        <div className="mx-5 mt-3">
+          <h2 className="font-extrabold text-navy text-lg mb-2 flex items-center gap-2"><ClipboardList size={18} className="text-brand" /> Assignments</h2>
+          <LearnerAssignments slug={course.slug} />
         </div>
       )}
 

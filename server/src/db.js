@@ -300,6 +300,32 @@ CREATE TABLE IF NOT EXISTS group_members (
   is_leader   INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (group_id, user_id)
 );
+CREATE TABLE IF NOT EXISTS assignments (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  course_id     INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  title         TEXT NOT NULL,
+  instructions  TEXT NOT NULL DEFAULT '',
+  format        TEXT NOT NULL DEFAULT 'text',   -- text | file | link
+  max_points    INTEGER NOT NULL DEFAULT 100,
+  due_at        TEXT,
+  created_by    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS submissions (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  assignment_id INTEGER NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
+  user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  body          TEXT,
+  file_url      TEXT,
+  link_url      TEXT,
+  status        TEXT NOT NULL DEFAULT 'submitted', -- submitted | graded
+  grade         INTEGER,
+  feedback      TEXT,
+  submitted_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  graded_at     TEXT,
+  graded_by     INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  UNIQUE(assignment_id, user_id)
+);
 `);
 
   // migrations for pre-existing databases
