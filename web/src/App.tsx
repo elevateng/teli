@@ -6,7 +6,7 @@ import BottomNav from './components/BottomNav';
 import AdminNav from './components/AdminNav';
 import SideNav from './components/SideNav';
 import { learnerNav, adminNav, NavItem } from './components/nav-items';
-import { Spinner } from './components/ui';
+import { Spinner, BookMark } from './components/ui';
 
 import AdminDashboard from './screens/admin/AdminDashboard';
 import AdminCourses from './screens/admin/AdminCourses';
@@ -110,6 +110,33 @@ function TabLayout() {
   return <RequireAuth><Shell items={learnerNav} mobileNav={<BottomNav />} /></RequireAuth>;
 }
 
+// Auth screens (login / signup / reset): on laptops a two-panel layout with a
+// brand panel beside the form; on phones the form is full-screen as before.
+function AuthShell() {
+  return (
+    <div className="min-h-[100dvh] w-full flex bg-white">
+      <div className="hidden lg:flex lg:w-[46%] xl:w-1/2 bg-navy text-white flex-col justify-between p-12 relative overflow-hidden">
+        <div className="relative z-10 flex items-center gap-2.5">
+          <BookMark size={40} />
+          <span className="text-2xl font-extrabold tracking-tight">TELI</span>
+        </div>
+        <div className="relative z-10">
+          <h1 className="text-[44px] font-extrabold leading-[1.05]">Learn. Lead.<br /><span className="text-brand">Elevate Impact.</span></h1>
+          <p className="text-white/70 mt-5 text-lg max-w-md">Practical training for social-impact professionals and changemakers in Nigeria.</p>
+        </div>
+        <p className="relative z-10 text-white/50 text-sm">An initiative of Elevate Development Foundation</p>
+        <div className="absolute -bottom-24 -right-24 w-96 h-96 rounded-full bg-brand/20" />
+        <div className="absolute top-24 -right-10 w-44 h-44 rounded-full bg-white/[0.04]" />
+      </div>
+      <div className="flex-1 flex flex-col min-h-[100dvh] lg:h-[100dvh] lg:overflow-y-auto no-scrollbar">
+        <div className="w-full lg:max-w-[520px] lg:mx-auto flex-1 flex flex-col lg:justify-center">
+          <Outlet />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function FullLayout({ guard = true, roles, wide = true }: { guard?: boolean; roles?: Role[]; wide?: boolean }) {
   const content = (
     <Phone wide={wide}>
@@ -124,9 +151,13 @@ function FullLayout({ guard = true, roles, wide = true }: { guard?: boolean; rol
 export default function App() {
   return (
     <Routes>
-      {/* public */}
+      {/* public splash */}
       <Route element={<FullLayout guard={false} wide={false} />}>
         <Route path="/" element={<Splash />} />
+      </Route>
+
+      {/* auth — desktop split layout */}
+      <Route element={<AuthShell />}>
         <Route path="/signup" element={<SignUp />} />
         <Route path="/login" element={<Login />} />
         <Route path="/reset" element={<ResetPassword />} />
