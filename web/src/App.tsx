@@ -4,6 +4,8 @@ import { useAuth, homeForRole } from './auth';
 import { Role } from './api';
 import BottomNav from './components/BottomNav';
 import AdminNav from './components/AdminNav';
+import SideNav from './components/SideNav';
+import { learnerNav, adminNav, NavItem } from './components/nav-items';
 import { Spinner } from './components/ui';
 
 import AdminDashboard from './screens/admin/AdminDashboard';
@@ -43,15 +45,45 @@ import Achievements from './screens/Achievements';
 import Certificate from './screens/Certificate';
 import Community from './screens/Community';
 
-// Responsive shell: full-screen on phones (with safe-area insets), and a clean
-// centered app panel on larger screens / desktop web.
-function Phone({ children }: { children: ReactNode }) {
+// Centered app panel. On phones it's full-screen (with safe-area insets); on
+// laptops/desktop it's a comfortable centered column. `wide` is used for the
+// main app where a desktop sidebar sits alongside it; the narrow variant is for
+// auth/standalone screens.
+function Phone({ children, wide }: { children: ReactNode; wide?: boolean }) {
+  if (wide) {
+    return (
+      <div className="min-h-[100dvh] w-full flex justify-center bg-navy-50/40">
+        <div className="relative w-full lg:max-w-[940px] bg-white flex flex-col h-[100dvh] overflow-hidden lg:border-x lg:border-black/[0.06]">
+          {children}
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="min-h-[100dvh] w-full flex justify-center bg-navy-50/60 md:py-6">
       <div className="relative w-full md:max-w-[480px] bg-white flex flex-col overflow-hidden
                       min-h-[100dvh] md:min-h-0 md:h-[calc(100dvh-3rem)]
                       md:rounded-[28px] md:shadow-xl md:ring-1 md:ring-black/[0.06]">
         {children}
+      </div>
+    </div>
+  );
+}
+
+// Main app shell: desktop side navigation + a centered content column with the
+// mobile bottom nav. Phones see only the column + bottom nav; laptops see the
+// sidebar and a wider layout.
+function Shell({ items, mobileNav }: { items: NavItem[]; mobileNav: ReactNode }) {
+  return (
+    <div className="h-[100dvh] w-full flex bg-navy-50/40">
+      <SideNav items={items} />
+      <div className="flex-1 flex justify-center min-w-0">
+        <div className="relative w-full lg:max-w-[940px] bg-white flex flex-col h-[100dvh] overflow-hidden lg:border-x lg:border-black/[0.06]">
+          <div className="flex-1 overflow-y-auto no-scrollbar">
+            <Outlet />
+          </div>
+          {mobileNav}
+        </div>
       </div>
     </div>
   );
@@ -69,34 +101,16 @@ function RequireAuth({ children, roles }: { children: ReactNode; roles?: Role[] 
 }
 
 function AdminLayout() {
-  return (
-    <RequireAuth roles={['admin', 'super_admin']}>
-      <Phone>
-        <div className="flex-1 overflow-y-auto no-scrollbar">
-          <Outlet />
-        </div>
-        <AdminNav />
-      </Phone>
-    </RequireAuth>
-  );
+  return <RequireAuth roles={['admin', 'super_admin']}><Shell items={adminNav} mobileNav={<AdminNav />} /></RequireAuth>;
 }
 
 function TabLayout() {
-  return (
-    <RequireAuth>
-      <Phone>
-        <div className="flex-1 overflow-y-auto no-scrollbar">
-          <Outlet />
-        </div>
-        <BottomNav />
-      </Phone>
-    </RequireAuth>
-  );
+  return <RequireAuth><Shell items={learnerNav} mobileNav={<BottomNav />} /></RequireAuth>;
 }
 
-function FullLayout({ guard = true, roles }: { guard?: boolean; roles?: Role[] }) {
+function FullLayout({ guard = true, roles, wide = true }: { guard?: boolean; roles?: Role[]; wide?: boolean }) {
   const content = (
-    <Phone>
+    <Phone wide={wide}>
       <div className="flex-1 overflow-y-auto no-scrollbar flex flex-col">
         <Outlet />
       </div>
@@ -109,7 +123,7 @@ export default function App() {
   return (
     <Routes>
       {/* public */}
-      <Route element={<FullLayout guard={false} />}>
+      <Route element={<FullLayout guard={false} wide={false} />}>
         <Route path="/" element={<Splash />} />
         <Route path="/signup" element={<SignUp />} />
         <Route path="/login" element={<Login />} />
