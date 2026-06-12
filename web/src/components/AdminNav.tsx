@@ -1,9 +1,10 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, BookCopy, TicketPercent, UsersRound, LifeBuoy } from 'lucide-react';
+import { LayoutDashboard, BookCopy, Users, TicketPercent, UsersRound, LifeBuoy } from 'lucide-react';
 
 const items = [
   { to: '/admin', label: 'Overview', icon: LayoutDashboard, end: true },
   { to: '/admin/courses', label: 'Courses', icon: BookCopy, end: false },
+  { to: '/admin/community', label: 'Community', icon: Users, end: false },
   { to: '/admin/coupons', label: 'Coupons', icon: TicketPercent, end: false },
   { to: '/admin/users', label: 'Users', icon: UsersRound, end: false },
   { to: '/admin/tickets', label: 'Support', icon: LifeBuoy, end: false },

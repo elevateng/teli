@@ -39,6 +39,7 @@ import QuizResults from './screens/QuizResults';
 import CourseComplete from './screens/CourseComplete';
 import Achievements from './screens/Achievements';
 import Certificate from './screens/Certificate';
+import Community from './screens/Community';
 
 // Responsive shell: full-screen on phones (with safe-area insets), and a clean
 // centered app panel on larger screens / desktop web.
@@ -117,6 +118,7 @@ export default function App() {
       <Route element={<TabLayout />}>
         <Route path="/home" element={<Home />} />
         <Route path="/explore" element={<Explore />} />
+        <Route path="/community" element={<Community />} />
         <Route path="/learning" element={<MyLearning />} />
         <Route path="/profile" element={<Profile />} />
       </Route>
@@ -127,6 +129,7 @@ export default function App() {
         <Route path="/admin/courses" element={<AdminCourses />} />
         <Route path="/admin/coupons" element={<AdminCoupons />} />
         <Route path="/admin/users" element={<AdminUsers />} />
+        <Route path="/admin/community" element={<Community />} />
         <Route path="/admin/tickets" element={<AdminTickets />} />
       </Route>
 

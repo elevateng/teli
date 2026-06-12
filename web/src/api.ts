@@ -171,7 +171,28 @@ export interface AppNotification {
   id: number; type: string; title: string; body: string; link: string | null; read: boolean; at: string;
 }
 
+export interface PostAuthor { id: number; name: string; avatar: string | null; role: Role; staff: boolean; }
+export interface CommunityPost {
+  id: number; body: string; image: string | null; pinned: boolean; createdAt: string;
+  author: PostAuthor | null; likes: number; liked: boolean; comments: number;
+}
+export interface CommunityComment {
+  id: number; body: string; createdAt: string; userId: number; author: PostAuthor | null;
+}
+
 export const naira = (n: number) => '₦' + n.toLocaleString('en-NG');
+
+// Friendly relative time, e.g. "3h", "2d".
+export function timeAgo(iso: string): string {
+  const then = new Date(iso.includes('T') || iso.includes(' ') ? iso.replace(' ', 'T') + (iso.endsWith('Z') ? '' : 'Z') : iso).getTime();
+  const s = Math.max(0, Math.floor((Date.now() - then) / 1000));
+  if (s < 60) return 'just now';
+  const m = Math.floor(s / 60); if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60); if (h < 24) return `${h}h`;
+  const d = Math.floor(h / 24); if (d < 7) return `${d}d`;
+  const w = Math.floor(d / 7); if (w < 5) return `${w}w`;
+  return new Date(then).toLocaleDateString();
+}
 
 // Share via the native share sheet, falling back to clipboard. Returns a status string.
 export async function shareOrCopy(data: { title?: string; text?: string; url: string }): Promise<'shared' | 'copied'> {

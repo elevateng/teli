@@ -259,6 +259,30 @@ CREATE TABLE IF NOT EXISTS access_codes (
 );
 `);
 
+  await client.executeMultiple(`
+CREATE TABLE IF NOT EXISTS community_posts (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  body        TEXT NOT NULL,
+  image       TEXT,
+  course_id   INTEGER REFERENCES courses(id) ON DELETE SET NULL,
+  pinned      INTEGER NOT NULL DEFAULT 0,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS community_comments (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  post_id     INTEGER NOT NULL REFERENCES community_posts(id) ON DELETE CASCADE,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  body        TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS community_likes (
+  post_id     INTEGER NOT NULL REFERENCES community_posts(id) ON DELETE CASCADE,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  PRIMARY KEY (post_id, user_id)
+);
+`);
+
   // migrations for pre-existing databases
   await addColumn('users', 'google_id', 'google_id TEXT');
   await addColumn('users', 'active', 'active INTEGER NOT NULL DEFAULT 1');

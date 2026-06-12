@@ -1404,6 +1404,105 @@ app.get('/api/admin/email-log', authOptional, requireRole('admin', 'super_admin'
   res.json({ enabled: emailEnabled, messages: sentMail.slice(0, 50) });
 });
 
+// ----------------------------- community wall -----------------------------
+const isStaffRole = (r) => r === 'admin' || r === 'super_admin';
+
+async function postView(p, userId) {
+  const author = await db.prepare('SELECT id, full_name, avatar, role FROM users WHERE id = ?').get(p.user_id);
+  const likes = (await db.prepare('SELECT COUNT(*) c FROM community_likes WHERE post_id = ?').get(p.id)).c;
+  const comments = (await db.prepare('SELECT COUNT(*) c FROM community_comments WHERE post_id = ?').get(p.id)).c;
+  const liked = userId ? !!(await db.prepare('SELECT 1 FROM community_likes WHERE post_id = ? AND user_id = ?').get(p.id, userId)) : false;
+  return {
+    id: p.id, body: p.body, image: p.image || null, pinned: !!p.pinned, createdAt: p.created_at,
+    author: author ? { id: author.id, name: author.full_name, avatar: author.avatar || null, role: author.role, staff: isStaffRole(author.role) } : null,
+    likes, liked, comments,
+  };
+}
+
+// feed — newest first, pinned on top
+app.get('/api/community', authOptional, authRequired, ah(async (req, res) => {
+  const rows = await db.prepare('SELECT * FROM community_posts ORDER BY pinned DESC, id DESC LIMIT 100').all();
+  const posts = [];
+  for (const p of rows) posts.push(await postView(p, req.user.id));
+  res.json({ posts });
+}));
+
+// single post with its comments
+app.get('/api/community/:id', authOptional, authRequired, ah(async (req, res) => {
+  const p = await db.prepare('SELECT * FROM community_posts WHERE id = ?').get(req.params.id);
+  if (!p) return res.status(404).json({ error: 'Post not found' });
+  const post = await postView(p, req.user.id);
+  const crows = await db.prepare('SELECT * FROM community_comments WHERE post_id = ? ORDER BY id ASC').all(p.id);
+  const comments = [];
+  for (const c of crows) {
+    const a = await db.prepare('SELECT id, full_name, avatar, role FROM users WHERE id = ?').get(c.user_id);
+    comments.push({ id: c.id, body: c.body, createdAt: c.created_at, userId: c.user_id,
+      author: a ? { id: a.id, name: a.full_name, avatar: a.avatar || null, role: a.role, staff: isStaffRole(a.role) } : null });
+  }
+  res.json({ post, comments });
+}));
+
+// create a post (any signed-in user)
+app.post('/api/community', authOptional, authRequired, ah(async (req, res) => {
+  const body = String(req.body?.body || '').trim();
+  const image = req.body?.image || null;
+  if (!body && !image) return res.status(400).json({ error: 'Write something to post' });
+  if (body.length > 5000) return res.status(400).json({ error: 'Post is too long' });
+  const r = await db.prepare('INSERT INTO community_posts (user_id, body, image) VALUES (?,?,?)').run(req.user.id, body, image);
+  const p = await db.prepare('SELECT * FROM community_posts WHERE id = ?').get(r.lastInsertRowid);
+  res.json({ post: await postView(p, req.user.id) });
+}));
+
+// delete a post (own, or staff moderation)
+app.delete('/api/community/:id', authOptional, authRequired, ah(async (req, res) => {
+  const p = await db.prepare('SELECT * FROM community_posts WHERE id = ?').get(req.params.id);
+  if (!p) return res.status(404).json({ error: 'Post not found' });
+  if (p.user_id !== req.user.id && !isStaffRole(req.user.role)) return res.status(403).json({ error: 'You can only delete your own posts' });
+  await db.prepare('DELETE FROM community_posts WHERE id = ?').run(p.id);
+  res.json({ ok: true });
+}));
+
+// like / unlike
+app.post('/api/community/:id/like', authOptional, authRequired, ah(async (req, res) => {
+  const p = await db.prepare('SELECT * FROM community_posts WHERE id = ?').get(req.params.id);
+  if (!p) return res.status(404).json({ error: 'Post not found' });
+  const existing = await db.prepare('SELECT 1 FROM community_likes WHERE post_id = ? AND user_id = ?').get(p.id, req.user.id);
+  if (existing) await db.prepare('DELETE FROM community_likes WHERE post_id = ? AND user_id = ?').run(p.id, req.user.id);
+  else {
+    await db.prepare('INSERT INTO community_likes (post_id, user_id) VALUES (?,?)').run(p.id, req.user.id);
+    if (p.user_id !== req.user.id) await notify(p.user_id, 'community', `${firstName(req.user.full_name)} liked your post`, '', '/community');
+  }
+  res.json({ post: await postView(p, req.user.id) });
+}));
+
+// pin / unpin (staff only)
+app.post('/api/community/:id/pin', authOptional, requireRole('admin', 'super_admin'), ah(async (req, res) => {
+  const p = await db.prepare('SELECT * FROM community_posts WHERE id = ?').get(req.params.id);
+  if (!p) return res.status(404).json({ error: 'Post not found' });
+  await db.prepare('UPDATE community_posts SET pinned = ? WHERE id = ?').run(p.pinned ? 0 : 1, p.id);
+  res.json({ ok: true, pinned: !p.pinned });
+}));
+
+// add a comment
+app.post('/api/community/:id/comments', authOptional, authRequired, ah(async (req, res) => {
+  const p = await db.prepare('SELECT * FROM community_posts WHERE id = ?').get(req.params.id);
+  if (!p) return res.status(404).json({ error: 'Post not found' });
+  const body = String(req.body?.body || '').trim();
+  if (!body) return res.status(400).json({ error: 'Write a comment' });
+  await db.prepare('INSERT INTO community_comments (post_id, user_id, body) VALUES (?,?,?)').run(p.id, req.user.id, body);
+  if (p.user_id !== req.user.id) await notify(p.user_id, 'community', `${firstName(req.user.full_name)} commented on your post`, body.slice(0, 80), '/community');
+  res.json({ ok: true });
+}));
+
+// delete a comment (own, or staff moderation)
+app.delete('/api/community/comments/:id', authOptional, authRequired, ah(async (req, res) => {
+  const c = await db.prepare('SELECT * FROM community_comments WHERE id = ?').get(req.params.id);
+  if (!c) return res.status(404).json({ error: 'Comment not found' });
+  if (c.user_id !== req.user.id && !isStaffRole(req.user.role)) return res.status(403).json({ error: 'You can only delete your own comments' });
+  await db.prepare('DELETE FROM community_comments WHERE id = ?').run(c.id);
+  res.json({ ok: true });
+}));
+
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
 // global error handler — keeps the server alive and returns a clean message

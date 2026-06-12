@@ -1,10 +1,11 @@
 import { NavLink } from 'react-router-dom';
-import { Home, Compass, BookOpen, User } from 'lucide-react';
+import { Home, Compass, Users, BookOpen, User } from 'lucide-react';
 
 const items = [
   { to: '/home', label: 'Home', icon: Home },
   { to: '/explore', label: 'Explore', icon: Compass },
-  { to: '/learning', label: 'My Learning', icon: BookOpen },
+  { to: '/community', label: 'Community', icon: Users },
+  { to: '/learning', label: 'Learning', icon: BookOpen },
   { to: '/profile', label: 'Profile', icon: User },
 ];
 
@@ -15,7 +16,7 @@ export default function BottomNav() {
         {items.map(({ to, label, icon: Icon }) => (
           <NavLink key={to} to={to}
             className={({ isActive }) =>
-              `flex flex-col items-center gap-1 px-3 py-1 rounded-xl ${isActive ? 'text-brand' : 'text-sub'}`
+              `flex flex-col items-center gap-1 px-2 py-1 rounded-xl ${isActive ? 'text-brand' : 'text-sub'}`
             }>
             {({ isActive }) => (
               <>
