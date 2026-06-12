@@ -151,7 +151,14 @@ function LessonEditor({ moduleId, lesson, onClose, onSaved }: { moduleId: number
           {kind === 'reading' && (
             <>
               <Field label="Heading"><input className="field" value={body.heading || ''} onChange={(e) => set('heading', e.target.value)} /></Field>
-              <Field label="Introduction"><RichText value={body.intro || ''} onChange={(v) => set('intro', v)} placeholder="Write the introduction…" /></Field>
+              <div>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <input className="text-sm font-bold text-navy bg-transparent outline-none border-b border-dashed border-black/25 focus:border-brand pb-0.5"
+                    value={body.introTitle ?? 'Introduction'} onChange={(e) => set('introTitle', e.target.value)} placeholder="Section title" />
+                  <span className="text-[11px] text-sub">(editable section title)</span>
+                </div>
+                <RichText value={body.intro || ''} onChange={(v) => set('intro', v)} placeholder="Write the section content…" />
+              </div>
               <PointsEditor points={body.points || []} onChange={(v) => set('points', v)} />
               <Field label="Remember (callout)"><RichText value={body.remember || ''} onChange={(v) => set('remember', v)} placeholder="A key thing to remember…" minHeight={72} /></Field>
               <Field label="Quote / example"><RichText value={body.quote || ''} onChange={(v) => set('quote', v)} placeholder="An example or quote…" minHeight={72} /></Field>

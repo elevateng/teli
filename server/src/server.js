@@ -36,6 +36,15 @@ async function notify(userId, type, title, body = '', link = null) {
     .run(userId, type, title, body, link);
 }
 
+// Notify users @mentioned in a community post/comment (ids array; skips the author).
+async function notifyMentions(mentions, actor, context, link) {
+  if (!Array.isArray(mentions)) return;
+  const ids = [...new Set(mentions.map(Number).filter((id) => id && id !== actor.id))].slice(0, 20);
+  for (const uid of ids) {
+    await notify(uid, 'mention', `${firstName(actor.full_name)} mentioned you`, context, link);
+  }
+}
+
 // ----------------------------- helpers -----------------------------
 const sign = (user) => jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '30d' });
 
@@ -205,6 +214,21 @@ async function addPoints(userId, pts) {
   await db.prepare('UPDATE users SET points = points + ? WHERE id = ?').run(pts, userId);
 }
 
+// Award milestone badges based on how many lessons the learner has completed.
+async function awardLessonMilestones(userId) {
+  const n = (await db.prepare('SELECT COUNT(*) c FROM lesson_progress WHERE user_id = ? AND completed = 1').get(userId)).c;
+  if (n >= 1) await award(userId, 'first-step', 'First Step', 'Completed your first lesson', 'rocket');
+  if (n >= 5) await award(userId, 'getting-going', 'Getting Going', 'Completed 5 lessons', 'bolt');
+  if (n >= 20) await award(userId, 'dedicated', 'Dedicated', 'Completed 20 lessons', 'flame');
+  if (n >= 50) await award(userId, 'unstoppable', 'Unstoppable', 'Completed 50 lessons', 'medal');
+}
+// Award milestone badges based on how many courses the learner has completed.
+async function awardCourseMilestones(userId) {
+  const n = (await db.prepare('SELECT COUNT(*) c FROM certificates WHERE user_id = ?').get(userId)).c;
+  if (n >= 3) await award(userId, 'triple-threat', 'Triple Threat', 'Completed 3 courses', 'trophy');
+  if (n >= 5) await award(userId, 'scholar', 'Scholar', 'Completed 5 courses', 'cap');
+}
+
 // Create a unique, single-use coupon that only `userId` can redeem (e.g. a reward).
 async function grantPersonalCoupon(userId, kind, value, label) {
   let code;
@@ -279,6 +303,7 @@ async function evaluateCourseCompletion(userId, courseId) {
       await db.prepare('INSERT INTO certificates (user_id,course_id) VALUES (?,?)').run(userId, courseId);
       await addPoints(userId, 200);
       await award(userId, 'course-master', 'Course Master', 'Completed a course', 'cap');
+      await awardCourseMilestones(userId);
       const c = await db.prepare('SELECT title, slug FROM courses WHERE id = ?').get(courseId);
       const learner = await db.prepare('SELECT full_name, email FROM users WHERE id = ?').get(userId);
       await notify(userId, 'certificate', 'Certificate unlocked 🎓', `You’ve earned your certificate for “${c.title}”.`, `/certificate/${c.slug}`);
@@ -512,6 +537,7 @@ app.post('/api/courses/:id/review', authOptional, authRequired, ah(async (req, r
     await db.prepare('INSERT INTO reviews (course_id,author,rating,body,user_id) VALUES (?,?,?,?,?)').run(course.id, req.user.full_name, rating, body, req.user.id);
   }
   await recomputeCourseRating(course.id);
+  await award(req.user.id, 'reviewer', 'Reviewer', 'Left a course review', 'pen');
   res.json({ course: await getCourseDetail(course.id, req.user.id) });
 }));
 
@@ -561,7 +587,10 @@ app.post('/api/lessons/:id/complete', authOptional, authRequired, ah(async (req,
     ON CONFLICT(user_id,course_id) DO UPDATE SET enrolled = 1, last_accessed = datetime('now')
   `).run(req.user.id, lesson.course_id);
   await evaluateCourseCompletion(req.user.id, lesson.course_id);
-  res.json({ progress: await courseProgress(req.user.id, lesson.course_id) });
+  await awardLessonMilestones(req.user.id);
+  const cert = await db.prepare('SELECT 1 FROM certificates WHERE user_id = ? AND course_id = ?').get(req.user.id, lesson.course_id);
+  const course = await db.prepare('SELECT slug FROM courses WHERE id = ?').get(lesson.course_id);
+  res.json({ progress: await courseProgress(req.user.id, lesson.course_id), certificate: !!cert, courseSlug: course?.slug });
 }));
 
 // ----------------------------- quiz submit -----------------------------
@@ -595,6 +624,7 @@ app.post('/api/lessons/:id/quiz', authOptional, authRequired, ah(async (req, res
     await award(req.user.id, 'quick-learner', 'Quick Learner', 'Passed a quiz', 'book');
     if (percent >= 80) await award(req.user.id, 'on-target', 'On Target', 'Scored 80% or higher', 'bullseye');
     if (percent >= 90) await award(req.user.id, 'top-performer', 'Top Performer', 'Scored 90% or higher', 'star');
+    if (percent >= 100) await award(req.user.id, 'perfectionist', 'Perfectionist', 'Aced a quiz with 100%', 'trophy');
     await evaluateCourseCompletion(req.user.id, lesson.course_id);
   }
 
@@ -1037,6 +1067,7 @@ app.post('/api/assignments/:aid/submit', authOptional, authRequired, ah(async (r
   const ids = new Set(staff.map((s) => s.id));
   if (course.created_by) ids.add(course.created_by);
   for (const uid of ids) await notify(uid, 'assignment', `${firstName(req.user.full_name)} submitted: ${a.title}`, course.title, `/admin/courses/${course.slug}/assignments`);
+  await award(req.user.id, 'go-getter', 'Go-Getter', 'Submitted an assignment', 'feather');
   res.json({ ok: true });
 }));
 
@@ -1365,6 +1396,15 @@ app.post('/api/admin/access-codes/:id/toggle', authOptional, requireRole('admin'
   if (!c) return res.status(404).json({ error: 'Code not found' });
   await db.prepare('UPDATE access_codes SET active = ? WHERE id = ?').run(c.active ? 0 : 1, c.id);
   res.json({ active: !c.active });
+}));
+
+// permanently delete an access code
+app.delete('/api/admin/access-codes/:id', authOptional, requireRole('admin', 'super_admin'), ah(async (req, res) => {
+  const c = await db.prepare('SELECT * FROM access_codes WHERE id = ?').get(req.params.id);
+  if (!c) return res.status(404).json({ error: 'Code not found' });
+  await db.prepare('DELETE FROM access_codes WHERE id = ?').run(c.id);
+  await audit(req.user, 'access_code.delete', c.code, 'course', c.course_id);
+  res.json({ ok: true });
 }));
 
 // learner: redeem an access code to join a private course (free)
@@ -1797,6 +1837,25 @@ app.get('/api/courses/:slug/community', authOptional, authRequired, ah(async (re
   res.json({ course: { slug: course.slug, title: course.title }, categories: POST_CATEGORIES, posts });
 }));
 
+// members of a course community (for @mention autocomplete)
+app.get('/api/courses/:slug/community/members', authOptional, authRequired, ah(async (req, res) => {
+  const course = await loadCourseOr404(req.params.slug);
+  if (!course) return res.status(404).json({ error: 'Course not found' });
+  if (!(await canAccessCommunity(req.user, course))) return res.status(403).json({ error: 'No access' });
+  const learners = await db.prepare(`
+    SELECT u.id, u.full_name, u.avatar, u.role FROM enrollments e JOIN users u ON u.id = e.user_id
+    WHERE e.course_id = ? AND e.enrolled = 1
+  `).all(course.id);
+  const staff = await db.prepare("SELECT id, full_name, avatar, role FROM users WHERE role IN ('admin','super_admin')").all();
+  const seen = new Set();
+  const members = [];
+  for (const u of [...learners, ...staff]) {
+    if (seen.has(u.id)) continue; seen.add(u.id);
+    members.push({ id: u.id, name: u.full_name, avatar: u.avatar || null, role: u.role });
+  }
+  res.json({ members });
+}));
+
 // create a post in a course community
 app.post('/api/courses/:slug/community', authOptional, authRequired, ah(async (req, res) => {
   const course = await loadCourseOr404(req.params.slug);
@@ -1811,6 +1870,8 @@ app.post('/api/courses/:slug/community', authOptional, authRequired, ah(async (r
   const r = await db.prepare('INSERT INTO community_posts (user_id, course_id, body, image, category) VALUES (?,?,?,?,?)')
     .run(req.user.id, course.id, body, image, category);
   const p = await db.prepare('SELECT * FROM community_posts WHERE id = ?').get(r.lastInsertRowid);
+  await award(req.user.id, 'community-voice', 'Community Voice', 'Posted in a community', 'message');
+  await notifyMentions(req.body?.mentions, req.user, `${course.title} community`, `/community/${course.slug}`);
   res.json({ post: await postView(p, req.user.id) });
 }));
 
@@ -1872,6 +1933,7 @@ app.post('/api/community/:id/comments', authOptional, authRequired, ah(async (re
   if (!body) return res.status(400).json({ error: 'Write a comment' });
   await db.prepare('INSERT INTO community_comments (post_id, user_id, body) VALUES (?,?,?)').run(ctx.p.id, req.user.id, body);
   if (ctx.p.user_id !== req.user.id) await notify(ctx.p.user_id, 'community', `${firstName(req.user.full_name)} commented on your post`, body.slice(0, 80), `/community/${ctx.course.slug}`);
+  await notifyMentions(req.body?.mentions, req.user, `${ctx.course.title} community`, `/community/${ctx.course.slug}`);
   res.json({ ok: true });
 }));
 

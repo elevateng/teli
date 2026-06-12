@@ -49,9 +49,12 @@ export default function Lesson() {
   const goNext = async () => {
     setCompleting(true);
     try {
-      const { progress } = await api.post<{ progress: { done: number; total: number } }>(`/lessons/${lesson.id}/complete`);
+      const { progress, certificate } = await api.post<{ progress: { done: number; total: number }; certificate: boolean }>(`/lessons/${lesson.id}/complete`);
       if (!next) {
-        if (progress.done === progress.total) nav(`/course/${slug}/complete`);
+        // Course finished: go straight to the certificate if it was issued,
+        // otherwise the celebration page (or back to the course if not complete).
+        if (certificate) nav(`/certificate/${slug}`);
+        else if (progress.done === progress.total) nav(`/course/${slug}/complete`);
         else nav(`/course/${slug}`);
         return;
       }
@@ -198,6 +201,7 @@ function ReadingLesson({ lesson }: { lesson: LessonNode }) {
     <div className="px-5 py-6">
       <span className="chip bg-violet-100 text-violet-700 inline-flex items-center gap-1.5"><FileText size={14} /> Reading</span>
       <h2 className="text-[26px] font-extrabold text-navy mt-3 leading-tight">{b.heading || lesson.title}</h2>
+      {b.introTitle && <h3 className="text-base font-extrabold text-navy mt-4">{b.introTitle}</h3>}
       <RichTextView html={b.intro || ''} className="text-sub mt-2 leading-relaxed" />
 
       {b.points && (

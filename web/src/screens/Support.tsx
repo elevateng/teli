@@ -90,7 +90,7 @@ function NewTicket({ onClose, onCreated }: { onClose: () => void; onCreated: (t:
           <input className="field" placeholder="Subject" value={subject} onChange={(e) => setSubject(e.target.value)} />
           <div className="grid grid-cols-2 gap-3">
             <select className="field" value={category} onChange={(e) => setCategory(e.target.value)}>
-              {['General', 'Payment', 'Course Access', 'Technical', 'Certificate'].map((c) => <option key={c}>{c}</option>)}
+              {['General', 'Payment', 'Course Access', 'Technical', 'Certificate', 'Other'].map((c) => <option key={c}>{c}</option>)}
             </select>
             <select className="field" value={priority} onChange={(e) => setPriority(e.target.value)}>
               {['low', 'normal', 'high'].map((c) => <option key={c} value={c}>{c[0].toUpperCase() + c.slice(1)} priority</option>)}

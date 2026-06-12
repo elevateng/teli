@@ -5,10 +5,24 @@ import { api, Achievement, Dashboard } from '../api';
 import { TopBar, PointIcon, Spinner } from '../components/ui';
 
 const ALL_BADGES = [
+  // progression
+  { icon: 'rocket', title: 'First Step', detail: 'Complete your first lesson', bg: 'bg-brand' },
+  { icon: 'bolt', title: 'Getting Going', detail: 'Complete 5 lessons', bg: 'bg-indigo-500' },
+  { icon: 'flame', title: 'Dedicated', detail: 'Complete 20 lessons', bg: 'bg-orange-500' },
+  { icon: 'medal', title: 'Unstoppable', detail: 'Complete 50 lessons', bg: 'bg-rose-500' },
+  // courses
+  { icon: 'cap', title: 'Course Master', detail: 'Complete a course', bg: 'bg-violet-500' },
+  { icon: 'trophy', title: 'Triple Threat', detail: 'Complete 3 courses', bg: 'bg-amber-500' },
+  { icon: 'medal', title: 'Scholar', detail: 'Complete 5 courses', bg: 'bg-emerald-600' },
+  // quizzes
   { icon: 'book', title: 'Quick Learner', detail: 'Pass a quiz', bg: 'bg-emerald-500' },
   { icon: 'bullseye', title: 'On Target', detail: 'Scored 80% or higher', bg: 'bg-blue-500' },
-  { icon: 'cap', title: 'Course Master', detail: 'Completed a course', bg: 'bg-violet-500' },
   { icon: 'star', title: 'Top Performer', detail: 'Scored 90% or higher', bg: 'bg-amber-400' },
+  { icon: 'trophy', title: 'Perfectionist', detail: 'Aced a quiz with 100%', bg: 'bg-yellow-500' },
+  // participation
+  { icon: 'pen', title: 'Reviewer', detail: 'Leave a course review', bg: 'bg-cyan-600' },
+  { icon: 'message', title: 'Community Voice', detail: 'Post in a community', bg: 'bg-sky-500' },
+  { icon: 'feather', title: 'Go-Getter', detail: 'Submit an assignment', bg: 'bg-teal-600' },
 ];
 
 export default function Achievements() {

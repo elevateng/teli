@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Target, Megaphone, Handshake, Sprout, FileText, Landmark, Shield, BarChart3,
   Heart, Users, GraduationCap, Star, Crosshair, ChevronLeft,
+  BookOpen, Rocket, Zap, Flame, Medal, Trophy, PenLine, MessageSquare, Feather,
 } from 'lucide-react';
 
 // ---------- course icon + color theming ----------
@@ -10,6 +11,8 @@ const ICONS: Record<string, any> = {
   target: Target, megaphone: Megaphone, handshake: Handshake, plant: Sprout,
   doc: FileText, institution: Landmark, shield: Shield, chart: BarChart3,
   heart: Heart, users: Users, cap: GraduationCap, star: Star, bullseye: Crosshair,
+  book: BookOpen, rocket: Rocket, bolt: Zap, flame: Flame, medal: Medal,
+  trophy: Trophy, pen: PenLine, message: MessageSquare, feather: Feather,
 };
 
 export const COLOR_BG: Record<string, string> = {

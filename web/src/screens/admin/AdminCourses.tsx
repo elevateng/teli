@@ -344,6 +344,7 @@ function AccessCodes({ course, onClose }: { course: CourseCard; onClose: () => v
     } finally { setBusy(false); }
   };
   const toggle = async (c: AccessCode) => { await api.post(`/admin/access-codes/${c.id}/toggle`); load(); };
+  const del = async (c: AccessCode) => { if (confirm(`Permanently delete code ${c.code}?`)) { await api.del(`/admin/access-codes/${c.id}`); load(); } };
   const copy = (code: string) => { navigator.clipboard?.writeText(code); setCopied(code); setTimeout(() => setCopied(''), 1500); };
 
   return (
@@ -375,7 +376,8 @@ function AccessCodes({ course, onClose }: { course: CourseCard; onClose: () => v
             <div key={c.id} className={`card p-3 flex items-center gap-2 ${c.active ? '' : 'opacity-50'}`}>
               <button onClick={() => copy(c.code)} className="font-mono font-bold text-navy flex items-center gap-1.5">{c.code} {copied === c.code ? <Check size={14} className="text-emerald-500" /> : <Copy size={13} className="text-sub" />}</button>
               <div className="flex-1 text-xs text-sub truncate">{c.email || 'anyone'} · used {c.usedCount}/{c.maxUses}</div>
-              <button onClick={() => toggle(c)} className="w-8 h-8 rounded-full bg-black/[0.05] flex items-center justify-center text-navy"><Power size={14} /></button>
+              <button onClick={() => toggle(c)} title={c.active ? 'Disable' : 'Enable'} className="w-8 h-8 rounded-full bg-black/[0.05] flex items-center justify-center text-navy"><Power size={14} /></button>
+              <button onClick={() => del(c)} title="Delete permanently" className="w-8 h-8 rounded-full bg-red-50 flex items-center justify-center text-red-500"><Trash2 size={14} /></button>
             </div>
           ))}
         </div>
