@@ -13,6 +13,72 @@ const CAT_STYLE: Record<string, string> = {
   Win: 'bg-emerald-100 text-emerald-700', Announcement: 'bg-amber-100 text-amber-700',
 };
 
+interface Member { id: number; name: string; avatar: string | null; role: string }
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// Resolve which members are @mentioned in a piece of text → their ids.
+function findMentions(text: string, members: Member[]): number[] {
+  const ids = members.filter((m) => text.includes('@' + m.name)).map((m) => m.id);
+  return [...new Set(ids)];
+}
+
+// Render text with @mentions of known members highlighted.
+function MentionText({ text, members }: { text: string; members: Member[] }) {
+  if (!members.length || !text.includes('@')) return <>{text}</>;
+  const names = members.map((m) => m.name).sort((a, b) => b.length - a.length).map(escapeRe);
+  const re = new RegExp('@(' + names.join('|') + ')', 'g');
+  const out: React.ReactNode[] = []; let last = 0; let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    if (m.index > last) out.push(text.slice(last, m.index));
+    out.push(<span key={m.index} className="text-brand font-semibold">@{m[1]}</span>);
+    last = m.index + m[0].length;
+  }
+  out.push(text.slice(last));
+  return <>{out}</>;
+}
+
+// Textarea with an @mention autocomplete dropdown.
+function MentionInput({ value, onChange, members, placeholder, rows = 2, className = '', onEnter }: {
+  value: string; onChange: (v: string) => void; members: Member[]; placeholder?: string; rows?: number; className?: string; onEnter?: () => void;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const [query, setQuery] = useState<string | null>(null);
+
+  const detect = (text: string) => {
+    const el = ref.current; if (!el) { setQuery(null); return; }
+    const upto = text.slice(0, el.selectionStart);
+    const mm = upto.match(/(?:^|\s)@([\w]*)$/);
+    setQuery(mm ? mm[1] : null);
+  };
+  const pick = (member: Member) => {
+    const el = ref.current; if (!el) return;
+    const caret = el.selectionStart;
+    const upto = value.slice(0, caret).replace(/(^|\s)@([\w]*)$/, (_f, pre) => `${pre}@${member.name} `);
+    onChange(upto + value.slice(caret)); setQuery(null);
+    setTimeout(() => ref.current?.focus(), 0);
+  };
+  const matches = query != null ? members.filter((m) => m.name.toLowerCase().includes(query!.toLowerCase())).slice(0, 6) : [];
+
+  return (
+    <div className="relative flex-1">
+      <textarea ref={ref} value={value} rows={rows} placeholder={placeholder} className={className}
+        onChange={(e) => { onChange(e.target.value); detect(e.target.value); }}
+        onKeyUp={(e) => detect((e.target as HTMLTextAreaElement).value)}
+        onKeyDown={(e) => { if (onEnter && e.key === 'Enter' && !e.shiftKey && query == null) { e.preventDefault(); onEnter(); } }} />
+      {matches.length > 0 && (
+        <div className="absolute z-[70] left-0 right-0 bottom-full mb-1 bg-white rounded-xl shadow-xl ring-1 ring-black/10 max-h-52 overflow-y-auto">
+          {matches.map((m) => (
+            <button key={m.id} type="button" onMouseDown={(e) => { e.preventDefault(); pick(m); }} className="w-full flex items-center gap-2 px-3 py-2 hover:bg-black/[0.05] text-left">
+              <Avatar name={m.name} src={m.avatar} size={26} /><span className="text-sm text-navy flex-1 truncate">{m.name}</span>
+              {m.role !== 'learner' && <span className="text-[10px] font-bold text-brand">{m.role === 'super_admin' ? 'Super Admin' : 'Admin'}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Community() {
   const { slug: paramSlug } = useParams();
   const [selected, setSelected] = useState<string | null>(paramSlug || null);
@@ -58,6 +124,7 @@ function CourseCommunity({ slug, onBack }: { slug: string; onBack: () => void })
   const { user } = useAuth();
   const staff = user?.role === 'admin' || user?.role === 'super_admin';
   const [data, setData] = useState<{ course: { title: string }; categories: string[]; posts: CommunityPost[] } | null>(null);
+  const [members, setMembers] = useState<Member[]>([]);
   const [filter, setFilter] = useState<string>('All');
   const [open, setOpen] = useState<CommunityPost | null>(null);
 
@@ -66,10 +133,11 @@ function CourseCommunity({ slug, onBack }: { slug: string; onBack: () => void })
     return api.get<{ course: { title: string }; categories: string[]; posts: CommunityPost[] }>(`/courses/${slug}/community${q}`).then(setData);
   };
   useEffect(() => { load(); }, [slug, filter]);
+  useEffect(() => { api.get<{ members: Member[] }>(`/courses/${slug}/community/members`).then((d) => setMembers(d.members)).catch(() => {}); }, [slug]);
 
   const patch = (p: CommunityPost) => setData((d) => d && { ...d, posts: d.posts.map((x) => (x.id === p.id ? p : x)) });
 
-  if (open) return <PostThread post={open} staff={staff} slug={slug} onBack={() => { setOpen(null); load(); }} onChange={patch} />;
+  if (open) return <PostThread post={open} staff={staff} slug={slug} members={members} onBack={() => { setOpen(null); load(); }} onChange={patch} />;
 
   const cats = ['All', ...(data?.categories || [])];
 
@@ -83,7 +151,7 @@ function CourseCommunity({ slug, onBack }: { slug: string; onBack: () => void })
         </div>
       </div>
 
-      <div className="px-5 mt-3"><Composer slug={slug} staff={staff} categories={data?.categories || []} onPosted={load} /></div>
+      <div className="px-5 mt-3"><Composer slug={slug} staff={staff} categories={data?.categories || []} members={members} onPosted={load} /></div>
 
       <div className="flex gap-2 overflow-x-auto no-scrollbar px-5 mt-4">
         {cats.map((c) => (
@@ -96,7 +164,7 @@ function CourseCommunity({ slug, onBack }: { slug: string; onBack: () => void })
         {!data ? <Spinner /> : data.posts.length === 0 ? (
           <div className="card p-8 text-center text-sub"><Users size={32} className="mx-auto text-brand mb-2" />No posts yet — start the conversation!</div>
         ) : data.posts.map((p) => (
-          <PostCard key={p.id} post={p} staff={staff} meId={user?.id} onChange={patch} onOpen={() => setOpen(p)} onRemoved={load} />
+          <PostCard key={p.id} post={p} staff={staff} meId={user?.id} members={members} onChange={patch} onOpen={() => setOpen(p)} onRemoved={load} />
         ))}
       </div>
     </div>
@@ -115,7 +183,7 @@ function CatChip({ category }: { category: string }) {
   return <span className={`chip inline-flex items-center gap-1 ${CAT_STYLE[category] || CAT_STYLE.Discussion}`}><Ico size={12} /> {category}</span>;
 }
 
-function Composer({ slug, staff, categories, onPosted }: { slug: string; staff?: boolean; categories: string[]; onPosted: () => void }) {
+function Composer({ slug, staff, categories, members, onPosted }: { slug: string; staff?: boolean; categories: string[]; members: Member[]; onPosted: () => void }) {
   const { user } = useAuth();
   const [body, setBody] = useState('');
   const [category, setCategory] = useState('Discussion');
@@ -128,7 +196,7 @@ function Composer({ slug, staff, categories, onPosted }: { slug: string; staff?:
   const submit = async () => {
     if (!body.trim() && !image) return;
     setBusy(true);
-    try { await api.post(`/courses/${slug}/community`, { body, image, category }); setBody(''); setImage(null); setCategory('Discussion'); onPosted(); }
+    try { await api.post(`/courses/${slug}/community`, { body, image, category, mentions: findMentions(body, members) }); setBody(''); setImage(null); setCategory('Discussion'); onPosted(); }
     finally { setBusy(false); }
   };
   const pick = async (e: React.ChangeEvent<HTMLInputElement>) => { const f = e.target.files?.[0]; if (f) setImage(await resizeImage(f, 1000)); };
@@ -137,8 +205,8 @@ function Composer({ slug, staff, categories, onPosted }: { slug: string; staff?:
     <div className="card p-3">
       <div className="flex gap-3">
         <Avatar name={user?.fullName} src={user?.avatar} size={40} />
-        <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Share something with the class…"
-          className="flex-1 bg-transparent outline-none resize-none text-[15px] pt-1.5 min-h-[44px]" rows={2} />
+        <MentionInput value={body} onChange={setBody} members={members} placeholder="Share something… use @ to mention"
+          className="w-full bg-transparent outline-none resize-none text-[15px] pt-1.5 min-h-[44px]" rows={2} />
       </div>
       {image && (
         <div className="relative mt-2 ml-12">
@@ -159,8 +227,8 @@ function Composer({ slug, staff, categories, onPosted }: { slug: string; staff?:
   );
 }
 
-function PostCard({ post, staff, meId, onChange, onOpen, onRemoved }: {
-  post: CommunityPost; staff?: boolean; meId?: number; onChange: (p: CommunityPost) => void; onOpen: () => void; onRemoved: () => void;
+function PostCard({ post, staff, meId, members, onChange, onOpen, onRemoved }: {
+  post: CommunityPost; staff?: boolean; meId?: number; members: Member[]; onChange: (p: CommunityPost) => void; onOpen: () => void; onRemoved: () => void;
 }) {
   const like = async () => { const { post: p } = await api.post<{ post: CommunityPost }>(`/community/${post.id}/like`); onChange(p); };
   const pin = async () => { await api.post(`/community/${post.id}/pin`); onRemoved(); };
@@ -188,7 +256,7 @@ function PostCard({ post, staff, meId, onChange, onOpen, onRemoved }: {
       </div>
 
       <div className="mt-2"><CatChip category={post.category} /></div>
-      {post.body && <p className="text-navy mt-2 whitespace-pre-wrap leading-relaxed">{post.body}</p>}
+      {post.body && <p className="text-navy mt-2 whitespace-pre-wrap leading-relaxed"><MentionText text={post.body} members={members} /></p>}
       {post.image && <img src={post.image} alt="" className="rounded-xl mt-3 w-full object-cover" />}
 
       <div className="flex items-center gap-5 mt-3 pt-3 border-t border-black/5">
@@ -203,7 +271,7 @@ function PostCard({ post, staff, meId, onChange, onOpen, onRemoved }: {
   );
 }
 
-function PostThread({ post, staff, slug, onBack, onChange }: { post: CommunityPost; staff?: boolean; slug: string; onBack: () => void; onChange: (p: CommunityPost) => void; }) {
+function PostThread({ post, staff, slug, members, onBack, onChange }: { post: CommunityPost; staff?: boolean; slug: string; members: Member[]; onBack: () => void; onChange: (p: CommunityPost) => void; }) {
   const { user } = useAuth();
   const [data, setData] = useState<{ post: CommunityPost; comments: CommunityComment[] } | null>(null);
   const [body, setBody] = useState('');
@@ -215,7 +283,7 @@ function PostThread({ post, staff, slug, onBack, onChange }: { post: CommunityPo
   const like = async () => { const { post: p } = await api.post<{ post: CommunityPost }>(`/community/${post.id}/like`); setData((d) => d && { ...d, post: p }); onChange(p); };
   const comment = async () => {
     if (!body.trim()) return; setBusy(true);
-    try { await api.post(`/community/${post.id}/comments`, { body }); setBody(''); await load(); }
+    try { await api.post(`/community/${post.id}/comments`, { body, mentions: findMentions(body, members) }); setBody(''); await load(); }
     finally { setBusy(false); }
   };
   const delComment = async (id: number) => { await api.del(`/community/comments/${id}`); load(); };
@@ -239,7 +307,7 @@ function PostThread({ post, staff, slug, onBack, onChange }: { post: CommunityPo
                 </div>
               </div>
               <div className="mt-2"><CatChip category={data.post.category} /></div>
-              {data.post.body && <p className="text-navy mt-2 whitespace-pre-wrap leading-relaxed">{data.post.body}</p>}
+              {data.post.body && <p className="text-navy mt-2 whitespace-pre-wrap leading-relaxed"><MentionText text={data.post.body} members={members} /></p>}
               {data.post.image && <img src={data.post.image} alt="" className="rounded-xl mt-3 w-full" />}
               <button onClick={like} className={`flex items-center gap-1.5 text-sm font-semibold mt-3 ${data.post.liked ? 'text-brand' : 'text-sub'}`}>
                 <Heart size={18} className={data.post.liked ? 'fill-brand' : ''} /> {data.post.likes} {data.post.likes === 1 ? 'like' : 'likes'}
@@ -256,7 +324,7 @@ function PostThread({ post, staff, slug, onBack, onChange }: { post: CommunityPo
                     <div className="flex-1">
                       <div className="bg-black/[0.04] rounded-2xl px-3.5 py-2">
                         <div className="flex items-center gap-1.5 flex-wrap"><span className="font-bold text-navy text-sm">{c.author?.name}</span><RoleBadge author={c.author} /></div>
-                        <p className="text-navy text-[15px] whitespace-pre-wrap">{c.body}</p>
+                        <p className="text-navy text-[15px] whitespace-pre-wrap"><MentionText text={c.body} members={members} /></p>
                       </div>
                       <div className="flex items-center gap-3 mt-1 pl-2">
                         <span className="text-[11px] text-sub">{timeAgo(c.createdAt)}</span>
@@ -271,9 +339,9 @@ function PostThread({ post, staff, slug, onBack, onChange }: { post: CommunityPo
 
           <div className="sticky bottom-0 bg-white border-t border-black/[0.06] px-4 py-3 flex items-center gap-2">
             <Avatar name={user?.fullName} src={user?.avatar} size={34} />
-            <input value={body} onChange={(e) => setBody(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && comment()}
-              placeholder="Write a comment…" className="field flex-1 py-2.5" />
-            <button onClick={comment} disabled={busy || !body.trim()} className="w-11 h-11 rounded-full bg-brand text-white flex items-center justify-center disabled:opacity-50"><Send size={18} /></button>
+            <MentionInput value={body} onChange={setBody} members={members} onEnter={comment}
+              placeholder="Write a comment… use @ to mention" rows={1} className="field w-full py-2.5 resize-none" />
+            <button onClick={comment} disabled={busy || !body.trim()} className="w-11 h-11 rounded-full bg-brand text-white flex items-center justify-center disabled:opacity-50 shrink-0"><Send size={18} /></button>
           </div>
         </>
       )}
