@@ -109,7 +109,9 @@ export interface QuizResult {
 }
 
 export interface RuntimeConfig {
+  paymentProvider: 'flutterwave' | 'paystack' | 'sandbox';
   paystackPublicKey: string | null; paystackEnabled: boolean;
+  flutterwavePublicKey: string | null; flutterwaveEnabled: boolean;
   googleClientId: string | null; googleEnabled: boolean;
 }
 

@@ -6,7 +6,7 @@ import crypto from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, extname } from 'node:path';
 import { db, DATA_DIR, initDb, usingCloudDb } from './db.js';
-import { config, paystackEnabled, googleEnabled, emailEnabled } from './config.js';
+import { config, paystackEnabled, flutterwaveEnabled, paymentProvider, googleEnabled, emailEnabled } from './config.js';
 import { sendMail, sentMail } from './mailer.js';
 
 const JWT_SECRET = config.JWT_SECRET;
@@ -242,8 +242,11 @@ app.post('/api/auth/login', ah(async (req, res) => {
 // public runtime config the web app needs (no secrets)
 app.get('/api/config', (_req, res) => {
   res.json({
+    paymentProvider, // 'flutterwave' | 'paystack' | 'sandbox'
     paystackPublicKey: config.PAYSTACK_PUBLIC_KEY || null,
     paystackEnabled,
+    flutterwavePublicKey: config.FLW_PUBLIC_KEY || null,
+    flutterwaveEnabled,
     googleClientId: config.GOOGLE_CLIENT_ID || null,
     googleEnabled,
   });
@@ -880,7 +883,7 @@ app.post('/api/checkout/init', authOptional, authRequired, ah(async (req, res) =
   if (q.error) return res.status(400).json({ error: q.error });
 
   const reference = 'TELI-' + crypto.randomBytes(8).toString('hex').toUpperCase();
-  const provider = q.amount === 0 ? 'free' : (paystackEnabled ? 'paystack' : 'sandbox');
+  const provider = q.amount === 0 ? 'free' : paymentProvider; // 'flutterwave' | 'paystack' | 'sandbox'
   await db.prepare(`INSERT INTO orders (reference,user_id,course_id,base_price,discount,amount,coupon_code,status,provider)
               VALUES (?,?,?,?,?,?,?,?,?)`)
     .run(reference, req.user.id, course.id, q.base, q.discount, q.amount, q.appliedCoupon, q.amount === 0 ? 'paid' : 'pending', provider);
@@ -888,6 +891,29 @@ app.post('/api/checkout/init', authOptional, authRequired, ah(async (req, res) =
   if (q.amount === 0) {
     await finalizeOrder(reference);
     return res.json({ mode: 'free', reference, amount: 0 });
+  }
+
+  if (provider === 'flutterwave') {
+    try {
+      const r = await fetch('https://api.flutterwave.com/v3/payments', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${config.FLW_SECRET_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tx_ref: reference,
+          amount: q.amount, // Flutterwave expects the major unit (naira)
+          currency: 'NGN',
+          redirect_url: `${config.APP_URL}/checkout/callback`,
+          customer: { email: req.user.email, name: req.user.full_name },
+          customizations: { title: 'TELI', description: course.title },
+          meta: { courseId: course.id, userId: req.user.id },
+        }),
+      });
+      const data = await r.json();
+      if (data.status !== 'success' || !data.data?.link) return res.status(502).json({ error: data.message || 'Flutterwave init failed' });
+      return res.json({ mode: 'flutterwave', reference, amount: q.amount, authorizationUrl: data.data.link });
+    } catch {
+      return res.status(502).json({ error: 'Could not reach Flutterwave' });
+    }
   }
 
   if (provider === 'paystack') {
@@ -908,7 +934,7 @@ app.post('/api/checkout/init', authOptional, authRequired, ah(async (req, res) =
       return res.status(502).json({ error: 'Could not reach Paystack' });
     }
   }
-  res.json({ mode: 'sandbox', reference, amount: q.amount, publicKey: config.PAYSTACK_PUBLIC_KEY || null });
+  res.json({ mode: 'sandbox', reference, amount: q.amount });
 }));
 
 async function finalizeOrder(reference) {
@@ -940,13 +966,29 @@ async function finalizeOrder(reference) {
 
 app.post('/api/checkout/verify', authOptional, authRequired, ah(async (req, res) => {
   const reference = req.body?.reference;
+  const transactionId = req.body?.transactionId; // Flutterwave returns this on redirect
   const order = await db.prepare('SELECT * FROM orders WHERE reference = ? AND user_id = ?').get(reference, req.user.id);
   if (!order) return res.status(404).json({ error: 'Order not found' });
   if (order.status === 'paid') {
     await finalizeOrder(reference);
     return res.json({ status: 'paid', course: await getCourseDetail(order.course_id, req.user.id) });
   }
-  if (order.provider === 'paystack') {
+
+  if (order.provider === 'flutterwave') {
+    try {
+      if (!transactionId) return res.status(400).json({ error: 'Missing transaction id' });
+      const r = await fetch(`https://api.flutterwave.com/v3/transactions/${encodeURIComponent(transactionId)}/verify`, {
+        headers: { Authorization: `Bearer ${config.FLW_SECRET_KEY}` },
+      });
+      const data = await r.json();
+      const d = data.data;
+      const ok = data.status === 'success' && d?.status === 'successful'
+        && d.tx_ref === reference && (d.currency === 'NGN') && Number(d.amount) >= Number(order.amount);
+      if (!ok) return res.status(402).json({ error: 'Payment not completed' });
+    } catch {
+      return res.status(502).json({ error: 'Could not verify with Flutterwave' });
+    }
+  } else if (order.provider === 'paystack') {
     try {
       const r = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
         headers: { Authorization: `Bearer ${config.PAYSTACK_SECRET_KEY}` },
@@ -961,6 +1003,22 @@ app.post('/api/checkout/verify', authOptional, authRequired, ah(async (req, res)
   await finalizeOrder(reference);
   await audit(req.user, 'order.paid', `${reference} (${order.amount})`, 'order', order.id);
   res.json({ status: 'paid', course: await getCourseDetail(order.course_id, req.user.id) });
+}));
+
+// Flutterwave webhook (server-to-server confirmation)
+app.post('/api/webhooks/flutterwave', ah(async (req, res) => {
+  if (config.FLW_SECRET_HASH) {
+    if (req.headers['verif-hash'] !== config.FLW_SECRET_HASH) return res.sendStatus(401);
+  }
+  const evt = req.body;
+  const ref = evt?.data?.tx_ref;
+  if ((evt?.event === 'charge.completed' || evt?.['event.type'] === 'CARD_TRANSACTION') && evt?.data?.status === 'successful' && ref) {
+    const order = await db.prepare('SELECT * FROM orders WHERE reference = ?').get(ref);
+    if (order && order.status !== 'paid' && Number(evt.data.amount) >= Number(order.amount)) {
+      await finalizeOrder(order.reference);
+    }
+  }
+  res.sendStatus(200);
 }));
 
 // Paystack webhook (server-to-server confirmation)

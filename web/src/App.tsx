@@ -16,6 +16,7 @@ import AdminLearnerDetail from './screens/admin/AdminLearnerDetail';
 import CourseContentEditor from './screens/admin/CourseContentEditor';
 
 import Checkout from './screens/Checkout';
+import CheckoutCallback from './screens/CheckoutCallback';
 import Support from './screens/Support';
 import Settings from './screens/Settings';
 import Notifications from './screens/Notifications';
@@ -132,6 +133,7 @@ export default function App() {
       {/* full-screen protected */}
       <Route element={<FullLayout />}>
         <Route path="/course/:slug/checkout" element={<Checkout />} />
+        <Route path="/checkout/callback" element={<CheckoutCallback />} />
         <Route path="/support" element={<Support />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/notifications" element={<Notifications />} />

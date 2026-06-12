@@ -39,8 +39,10 @@ export default function Checkout() {
         await api.post('/checkout/verify', { reference: init.reference });
         nav(`/course/${slug}/enrolled`); return;
       }
-      if (init.mode === 'paystack' && init.authorizationUrl) {
-        window.location.href = init.authorizationUrl; return; // real Paystack redirect
+      if (init.authorizationUrl) {
+        // real gateway (Flutterwave / Paystack): remember which course, then redirect
+        sessionStorage.setItem('teli_checkout', JSON.stringify({ reference: init.reference, slug }));
+        window.location.href = init.authorizationUrl; return;
       }
       // sandbox — show simulated processing then verify
       setStage('paying');
@@ -58,7 +60,7 @@ export default function Checkout() {
           <Loader2 size={40} className="text-brand animate-spin" />
         </div>
         <h2 className="text-2xl font-extrabold text-navy">Processing payment…</h2>
-        <p className="text-sub mt-2">Securely confirming your {naira(amount)} payment via Paystack (sandbox).</p>
+        <p className="text-sub mt-2">Securely confirming your {naira(amount)} payment (sandbox).</p>
       </div>
     );
   }
