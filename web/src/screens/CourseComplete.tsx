@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ChevronLeft, Bookmark, MoreVertical, Trophy, PlayCircle, CheckCircle2, Clock, BadgeCheck, ShieldCheck, BarChart3, ChevronRight, ArrowRight, Download } from 'lucide-react';
+import { ChevronLeft, Home, Trophy, PlayCircle, CheckCircle2, Clock, BadgeCheck, ShieldCheck, BarChart3, ChevronRight, ArrowRight, Download } from 'lucide-react';
 import { api, CourseDetail as CD, Dashboard } from '../api';
 import { Confetti, Spinner } from '../components/ui';
 
@@ -26,7 +26,7 @@ export default function CourseComplete() {
           <h1 className="font-bold text-navy text-[15px] truncate">{course.title}</h1>
           <p className="text-xs text-sub truncate">Course Complete</p>
         </div>
-        <Bookmark size={20} className="text-navy" /><MoreVertical size={20} className="text-navy" />
+        <button onClick={() => nav('/home')} aria-label="Home"><Home size={20} className="text-navy" /></button>
       </div>
 
       <div className="relative px-5 pt-8 text-center">

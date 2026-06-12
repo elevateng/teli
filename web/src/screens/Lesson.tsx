@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   ChevronLeft, Bookmark, MoreVertical, Heart, Shield, Users, Lightbulb, Quote,
   ArrowRight, ArrowLeft, Play, Pause, Maximize, Captions, Settings, Clock, SignalHigh,
-  FileText, Puzzle, CheckCircle2, ListChecks, Flag,
+  FileText, Puzzle, CheckCircle2, ListChecks, Flag, Home, GraduationCap,
 } from 'lucide-react';
 import { api, CourseDetail as CD, LessonNode, ModuleNode } from '../api';
 import { Spinner, ProgressBar } from '../components/ui';
@@ -69,12 +69,15 @@ export default function Lesson() {
         <button onClick={async () => { const { saved: s } = await api.post<{ saved: boolean }>(`/courses/${course.id}/save`); setSaved(s); }}>
           <Bookmark size={20} className={saved ? 'text-brand fill-brand' : 'text-navy'} />
         </button>
+        <button onClick={() => nav('/home')} aria-label="Home"><Home size={20} className="text-navy" /></button>
         <button onClick={() => setMenu(true)}><MoreVertical size={20} className="text-navy" /></button>
       </div>
       {menu && (
         <div className="absolute inset-0 bg-black/40 flex items-end z-50" onClick={() => setMenu(false)}>
           <div className="bg-white w-full rounded-t-3xl p-4 fade-up" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => nav('/home')} className="w-full flex items-center gap-3 p-3 text-navy font-semibold"><Home size={20} /> Home</button>
             <button onClick={() => nav(`/course/${slug}`)} className="w-full flex items-center gap-3 p-3 text-navy font-semibold"><ListChecks size={20} /> Course overview</button>
+            <button onClick={() => nav('/learning')} className="w-full flex items-center gap-3 p-3 text-navy font-semibold"><GraduationCap size={20} /> My Learning</button>
             <button onClick={() => nav('/support')} className="w-full flex items-center gap-3 p-3 text-navy font-semibold"><Flag size={20} /> Report an issue</button>
             <button onClick={() => setMenu(false)} className="w-full p-3 text-sub font-semibold mt-1">Cancel</button>
           </div>

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { ChevronLeft, Trophy, CheckCircle2, XCircle, ChevronDown, ArrowRight, ClipboardCheck } from 'lucide-react';
+import { ChevronLeft, Home, Trophy, CheckCircle2, XCircle, ChevronDown, ArrowRight, ClipboardCheck } from 'lucide-react';
 import { QuizResult } from '../api';
 import { Confetti } from '../components/ui';
 
@@ -22,6 +22,7 @@ export default function QuizResults() {
           <h1 className="font-bold text-navy text-[15px] truncate">{courseTitle}</h1>
           <p className="text-xs text-sub truncate">{moduleTitle}</p>
         </div>
+        <button onClick={() => nav('/home')} aria-label="Home"><Home size={20} className="text-navy" /></button>
       </div>
 
       <div className="px-5 py-3 flex items-center gap-3 border-b border-black/[0.05]">

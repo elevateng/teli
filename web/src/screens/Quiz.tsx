@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ChevronLeft, Bookmark, MoreVertical, ArrowLeft, Lightbulb, CheckCircle2, XCircle } from 'lucide-react';
+import { ChevronLeft, Home, ArrowLeft, Lightbulb, CheckCircle2, XCircle } from 'lucide-react';
 import { api, CourseDetail as CD, QuizResult } from '../api';
 import { Spinner, ProgressBar } from '../components/ui';
 
@@ -54,8 +54,7 @@ export default function Quiz() {
           <h1 className="font-bold text-navy text-[15px] truncate">{course.title}</h1>
           <p className="text-xs text-sub truncate">{moduleTitle}</p>
         </div>
-        <Bookmark size={20} className="text-navy" />
-        <MoreVertical size={20} className="text-navy" />
+        <button onClick={() => nav('/home')} aria-label="Home"><Home size={20} className="text-navy" /></button>
       </div>
 
       <div className="px-5 py-3 flex items-center gap-3 border-b border-black/[0.05]">
