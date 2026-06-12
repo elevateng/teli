@@ -1,12 +1,13 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { ArrowRight, User, Mail, Lock, Eye, EyeOff, ShieldCheck } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { ArrowRight, User, Mail, Lock, Eye, EyeOff, ShieldCheck, Gift } from 'lucide-react';
 import { StatusBar, Wordmark } from '../components/ui';
 import { useAuth } from '../auth';
 import GoogleButton from '../components/GoogleButton';
 
 export default function SignUp() {
   const nav = useNavigate();
+  const [params] = useSearchParams();
   const { register } = useAuth();
   const [fullName, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -16,13 +17,17 @@ export default function SignUp() {
   const [show2, setShow2] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const ref = params.get('ref') || sessionStorage.getItem('teli_ref') || '';
+
+  // remember the referral code so it survives the Google sign-in redirect too
+  useEffect(() => { if (params.get('ref')) sessionStorage.setItem('teli_ref', params.get('ref')!); }, [params]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     if (password !== confirm) return setError('Passwords do not match.');
     setBusy(true);
-    try { const u = await register(fullName, email, password); nav(u.role === 'learner' ? '/home' : '/admin', { replace: true }); }
+    try { const u = await register(fullName, email, password, ref || undefined); sessionStorage.removeItem('teli_ref'); nav(u.role === 'learner' ? '/home' : '/admin', { replace: true }); }
     catch (err: any) { setError(err.message); }
     finally { setBusy(false); }
   };
@@ -40,6 +45,13 @@ export default function SignUp() {
       <form onSubmit={submit} className="flex-1 px-6 pt-8">
         <h1 className="text-[34px] font-extrabold text-navy leading-tight">Create your account</h1>
         <p className="text-sub mt-2 max-w-[18rem]">Join TELI and start your journey to learn, lead and elevate impact.</p>
+
+        {ref && (
+          <div className="mt-4 rounded-2xl bg-brand-50 p-3 flex items-center gap-3">
+            <span className="w-9 h-9 rounded-full bg-white flex items-center justify-center"><Gift size={18} className="text-brand" /></span>
+            <p className="text-sm text-navy">You were invited! Sign up to get a <b>10% off</b> welcome code.</p>
+          </div>
+        )}
 
         {error && <div className="mt-4 text-sm bg-red-50 text-red-600 rounded-xl px-4 py-3">{error}</div>}
 

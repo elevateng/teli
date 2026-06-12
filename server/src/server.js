@@ -45,6 +45,7 @@ function publicUser(u) {
     id: u.id, fullName: u.full_name, email: u.email, tagline: u.tagline,
     role: u.role || 'learner', points: u.points, streakDays: u.streak_days,
     avatar: u.avatar || null, mustChangePassword: !!u.must_change_password,
+    referralPoints: u.referral_points || 0,
   };
 }
 
@@ -174,6 +175,45 @@ async function addPoints(userId, pts) {
   await db.prepare('UPDATE users SET points = points + ? WHERE id = ?').run(pts, userId);
 }
 
+// Create a unique, single-use coupon that only `userId` can redeem (e.g. a reward).
+async function grantPersonalCoupon(userId, kind, value, label) {
+  let code;
+  do { code = 'TELI' + crypto.randomBytes(3).toString('hex').toUpperCase(); }
+  while (await db.prepare('SELECT 1 FROM coupons WHERE code = ?').get(code));
+  await db.prepare('INSERT INTO coupons (code,kind,value,course_id,max_uses,single_use,active,user_id,label) VALUES (?,?,?,NULL,1,1,1,?,?)')
+    .run(code, kind, value, userId, label);
+  return code;
+}
+
+// Apply referral rewards when `newUser` signs up via `refCode`.
+async function applyReferral(refCode, newUser) {
+  if (!refCode) return;
+  const ref = await db.prepare('SELECT * FROM referrals WHERE code = ?').get(String(refCode).toUpperCase());
+  if (!ref || ref.user_id === newUser.id) return;
+  const referrer = await db.prepare('SELECT * FROM users WHERE id = ?').get(ref.user_id);
+  if (!referrer) return;
+
+  // record who referred them (only once)
+  await db.prepare('UPDATE users SET referred_by = ? WHERE id = ? AND referred_by IS NULL').run(referrer.id, newUser.id);
+
+  // joiner gets a one-time 10% welcome coupon
+  const joinerCode = await grantPersonalCoupon(newUser.id, 'percent', 10, 'Referral welcome');
+  await notify(newUser.id, 'success', 'Welcome gift: 10% off 🎁', `Use code ${joinerCode} for 10% off any course (one-time).`, '/explore');
+
+  // referrer earns 10 referral points; every 50 points unlocks a 50% reward
+  const before = referrer.referral_points || 0;
+  const after = before + 10;
+  await db.prepare('UPDATE users SET referral_points = ? WHERE id = ?').run(after, referrer.id);
+  await notify(referrer.id, 'system', '+10 referral points 🎉', `${newUser.full_name} joined with your link. You now have ${after} referral points.`, '/profile');
+  if (Math.floor(after / 50) > Math.floor(before / 50)) {
+    const rewardCode = await grantPersonalCoupon(referrer.id, 'percent', 50, 'Referral milestone');
+    await notify(referrer.id, 'certificate', 'Reward unlocked: 50% off! 🏆', `You hit ${Math.floor(after / 50) * 50} referral points! Use ${rewardCode} for 50% off any course (one-time).`, '/profile');
+    const r = await db.prepare('SELECT full_name, email FROM users WHERE id = ?').get(referrer.id);
+    if (r) sendMail({ to: r.email, subject: 'You earned 50% off on TELI 🏆', title: 'Referral reward unlocked',
+      html: `<p>Hi ${r.full_name.split(' ')[0]},</p><p>Amazing — your invites earned you a <b>50% off</b> reward!</p><p>Use this one-time code at checkout: <code style="background:#f3f4f6;padding:2px 8px;border-radius:4px;font-size:16px">${rewardCode}</code></p>` });
+  }
+}
+
 // Average quiz score for a user across a course's quiz lessons (best attempt each).
 async function courseQuizStats(userId, courseId) {
   const quizLessons = (await db.prepare(`
@@ -231,6 +271,7 @@ app.post('/api/auth/register', ah(async (req, res) => {
   const info = await db.prepare('INSERT INTO users (full_name,email,password) VALUES (?,?,?)')
     .run(fullName, String(email).toLowerCase(), hash);
   const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid);
+  await applyReferral(req.body?.ref, user);
   res.json({ token: sign(user), user: publicUser(user) });
 }));
 
@@ -276,6 +317,7 @@ app.post('/api/auth/google', ah(async (req, res) => {
       .run(name, email, '', sub);
     user = await db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid);
     await audit(user, 'signup.google', email, 'user', user.id);
+    await applyReferral(req.body?.ref, user);
   } else if (!user.google_id) {
     await db.prepare('UPDATE users SET google_id = ? WHERE id = ?').run(sub, user.id);
   }
@@ -962,6 +1004,7 @@ async function priceCourse(course, couponCode, userId) {
   if (couponCode) {
     const c = await db.prepare('SELECT * FROM coupons WHERE code = ?').get(String(couponCode).toUpperCase());
     if (!c || !c.active) error = 'Invalid coupon code';
+    else if (c.user_id && c.user_id !== userId) error = 'This code belongs to a different account';
     else if (c.expires_at && new Date(c.expires_at) < new Date()) error = 'This coupon has expired';
     else if (c.course_id && c.course_id !== course.id) error = 'This coupon is not valid for this course';
     else if (c.used_count >= c.max_uses) error = 'This coupon has reached its usage limit';
@@ -1238,7 +1281,26 @@ app.get('/api/me/referral', authOptional, authRequired, ah(async (req, res) => {
     await db.prepare('INSERT INTO referrals (user_id,code) VALUES (?,?)').run(req.user.id, code);
     row = { code };
   }
-  res.json({ code: row.code, url: `${config.APP_URL}/signup?ref=${row.code}` });
+  const referrals = (await db.prepare('SELECT COUNT(*) c FROM users WHERE referred_by = ?').get(req.user.id)).c;
+  const points = req.user.referral_points || 0;
+  res.json({
+    code: row.code, url: `${config.APP_URL}/signup?ref=${row.code}`,
+    referrals, points, nextRewardAt: (Math.floor(points / 50) + 1) * 50,
+  });
+}));
+
+// the user's personal reward coupons (referral welcome / milestones)
+app.get('/api/me/rewards', authOptional, authRequired, ah(async (req, res) => {
+  const rows = await db.prepare('SELECT * FROM coupons WHERE user_id = ? ORDER BY id DESC').all(req.user.id);
+  const rewards = [];
+  for (const c of rows) {
+    const usedPaid = await db.prepare("SELECT 1 FROM orders WHERE user_id = ? AND coupon_code = ? AND status = 'paid'").get(req.user.id, c.code);
+    rewards.push({
+      code: c.code, kind: c.kind, value: c.value, label: c.label,
+      used: !!usedPaid || c.used_count >= c.max_uses, active: !!c.active,
+    });
+  }
+  res.json({ rewards });
 }));
 
 app.post('/api/me/invite', authOptional, authRequired, ah(async (req, res) => {

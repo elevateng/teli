@@ -5,8 +5,8 @@ interface AuthCtx {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<User>;
-  register: (fullName: string, email: string, password: string) => Promise<User>;
-  googleAuth: (payload: { credential?: string; devEmail?: string; devName?: string }) => Promise<User>;
+  register: (fullName: string, email: string, password: string, ref?: string) => Promise<User>;
+  googleAuth: (payload: { credential?: string; ref?: string }) => Promise<User>;
   setUser: (u: User) => void;
   logout: () => void;
   refresh: () => Promise<void>;
@@ -38,12 +38,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     handleAuth(token, user);
     return user;
   };
-  const register = async (fullName: string, email: string, password: string) => {
-    const { token, user } = await api.post<{ token: string; user: User }>('/auth/register', { fullName, email, password });
+  const register = async (fullName: string, email: string, password: string, ref?: string) => {
+    const { token, user } = await api.post<{ token: string; user: User }>('/auth/register', { fullName, email, password, ref });
     handleAuth(token, user);
     return user;
   };
-  const googleAuth = async (payload: { credential?: string; devEmail?: string; devName?: string }) => {
+  const googleAuth = async (payload: { credential?: string; ref?: string }) => {
     const { token, user } = await api.post<{ token: string; user: User }>('/auth/google', payload);
     handleAuth(token, user);
     return user;

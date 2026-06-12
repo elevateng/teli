@@ -4,7 +4,7 @@ import {
   Settings, Flame, Gem, ChevronRight, Clock, CheckCircle2, BarChart3, TrendingUp,
   Award, Users, Upload, LogOut, LifeBuoy, X, Copy, Send,
 } from 'lucide-react';
-import { api, Achievement, Certificate, Dashboard, shareOrCopy } from '../api';
+import { api, Achievement, Certificate, Dashboard, ReferralInfo, Reward, shareOrCopy } from '../api';
 import { StatusBar, ProgressBar, PointIcon, Spinner, Avatar } from '../components/ui';
 import { useAuth } from '../auth';
 
@@ -160,27 +160,69 @@ function Insight({ icon, bg, value, label }: { icon: React.ReactNode; bg: string
 }
 
 function InviteSheet({ onClose }: { onClose: () => void }) {
-  const [ref, setRef] = useState<{ code: string; url: string } | null>(null);
+  const [ref, setRef] = useState<ReferralInfo | null>(null);
+  const [rewards, setRewards] = useState<Reward[]>([]);
   const [emails, setEmails] = useState('');
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
+  const [copiedCode, setCopiedCode] = useState('');
 
-  useEffect(() => { api.get<{ code: string; url: string }>('/me/referral').then(setRef); }, []);
+  useEffect(() => {
+    api.get<ReferralInfo>('/me/referral').then(setRef);
+    api.get<{ rewards: Reward[] }>('/me/rewards').then((d) => setRewards(d.rewards));
+  }, []);
 
   const copy = async () => { if (ref) { const r = await shareOrCopy({ title: 'Join me on TELI', url: ref.url }); setMsg(r === 'copied' ? 'Link copied!' : 'Shared!'); setTimeout(() => setMsg(''), 1800); } };
+  const copyCode = (code: string) => { navigator.clipboard?.writeText(code); setCopiedCode(code); setTimeout(() => setCopiedCode(''), 1500); };
   const send = async () => {
     setBusy(true); setMsg('');
     try { const r = await api.post<{ sent: number }>('/me/invite', { emails }); setMsg(`Invite sent to ${r.sent} ${r.sent === 1 ? 'person' : 'people'}!`); setEmails(''); }
     catch (e: any) { setMsg(e.message); } finally { setBusy(false); }
   };
 
+  const points = ref?.points ?? 0;
+  const next = ref?.nextRewardAt ?? 50;
+  const pct = Math.min(100, Math.round(((points % 50) / 50) * 100));
+  const available = rewards.filter((r) => !r.used && r.active);
+
   return (
     <div className="absolute inset-0 bg-black/40 flex items-end z-50" onClick={onClose}>
-      <div className="bg-white w-full rounded-t-3xl p-5 fade-up" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white w-full rounded-t-3xl p-5 fade-up max-h-[92%] overflow-y-auto no-scrollbar" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-extrabold text-navy">Invite Friends</h2>
+          <h2 className="text-xl font-extrabold text-navy">Invite & Rewards</h2>
           <button onClick={onClose} className="w-9 h-9 rounded-full bg-black/[0.05] flex items-center justify-center"><X size={18} /></button>
         </div>
+
+        {/* referral progress */}
+        <div className="rounded-2xl bg-gradient-to-br from-brand-50 to-orange-100/60 p-4 mb-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-2xl font-extrabold text-navy">{points} <span className="text-sm font-bold text-sub">referral points</span></p>
+              <p className="text-xs text-sub">{ref?.referrals ?? 0} friend{ref?.referrals === 1 ? '' : 's'} joined · +10 each</p>
+            </div>
+            <Gem size={28} className="text-brand" />
+          </div>
+          <div className="mt-3 h-2 rounded-full bg-white/70 overflow-hidden"><div className="h-full bg-brand rounded-full" style={{ width: `${pct}%` }} /></div>
+          <p className="text-xs text-navy/80 mt-1.5">{50 - (points % 50)} more points to unlock a <b>50% off</b> code (at {next}).</p>
+        </div>
+
+        {/* your reward codes */}
+        {available.length > 0 && (
+          <div className="mb-4">
+            <p className="text-sm font-bold text-navy mb-2">🎁 Your reward codes</p>
+            <div className="space-y-2">
+              {available.map((rw) => (
+                <button key={rw.code} onClick={() => copyCode(rw.code)} className="w-full card p-3 flex items-center gap-3 text-left">
+                  <span className="chip bg-brand text-white">{rw.value}% OFF</span>
+                  <span className="font-mono font-bold text-navy flex-1">{rw.code}</span>
+                  {copiedCode === rw.code ? <CheckCircle2 size={16} className="text-emerald-500" /> : <Copy size={15} className="text-sub" />}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-sub mt-1.5">Apply any code at checkout. Each works once.</p>
+          </div>
+        )}
+
         <p className="text-sm font-bold text-navy mb-2">Your referral link</p>
         <div className="flex gap-2">
           <input readOnly value={ref?.url || 'Loading…'} className="field flex-1 text-sm" />

@@ -265,7 +265,12 @@ CREATE TABLE IF NOT EXISTS access_codes (
   await addColumn('users', 'created_by', 'created_by INTEGER');
   await addColumn('users', 'avatar', 'avatar TEXT');
   await addColumn('users', 'must_change_password', 'must_change_password INTEGER NOT NULL DEFAULT 0');
+  await addColumn('users', 'referral_points', 'referral_points INTEGER NOT NULL DEFAULT 0');
+  await addColumn('users', 'referred_by', 'referred_by INTEGER'); // referrer user id
   await addColumn('courses', 'visibility', "visibility TEXT NOT NULL DEFAULT 'public'"); // public | private
+  // personal (user-owned) coupons, e.g. referral rewards
+  await addColumn('coupons', 'user_id', 'user_id INTEGER'); // null = public coupon
+  await addColumn('coupons', 'label', 'label TEXT');
   await addColumn('courses', 'cert_min_progress', 'cert_min_progress INTEGER NOT NULL DEFAULT 100');
   await addColumn('courses', 'cert_min_quiz_score', 'cert_min_quiz_score INTEGER NOT NULL DEFAULT 0');
   await addColumn('courses', 'cert_require_quizzes', 'cert_require_quizzes INTEGER NOT NULL DEFAULT 1');

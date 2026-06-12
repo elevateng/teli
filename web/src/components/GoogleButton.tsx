@@ -34,8 +34,12 @@ export default function GoogleButton() {
       window.google?.accounts.id.initialize({
         client_id: cfg.googleClientId,
         callback: async (resp: any) => {
-          try { const u = await googleAuth({ credential: resp.credential }); nav(homeForRole(u), { replace: true }); }
-          catch (e: any) { setError(e.message); }
+          try {
+            const ref = sessionStorage.getItem('teli_ref') || undefined;
+            const u = await googleAuth({ credential: resp.credential, ref });
+            sessionStorage.removeItem('teli_ref');
+            nav(homeForRole(u), { replace: true });
+          } catch (e: any) { setError(e.message); }
         },
       });
       if (slotRef.current) window.google?.accounts.id.renderButton(slotRef.current, { theme: 'outline', size: 'large', width: 320, text: 'continue_with' });

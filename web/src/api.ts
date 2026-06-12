@@ -67,6 +67,8 @@ export interface User {
   points: number; streakDays: number; avatar?: string | null; mustChangePassword?: boolean;
 }
 export interface AccessCode { id: number; code: string; email: string | null; maxUses: number; usedCount: number; active: boolean; createdAt: string; }
+export interface Reward { code: string; kind: 'percent' | 'fixed'; value: number; label: string | null; used: boolean; active: boolean; }
+export interface ReferralInfo { code: string; url: string; referrals: number; points: number; nextRewardAt: number; }
 
 export interface AdminStats {
   learners: number; admins: number; courses: number; enrollments: number;
