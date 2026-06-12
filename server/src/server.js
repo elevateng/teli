@@ -145,6 +145,7 @@ async function getCourseDetail(slugOrId, userId) {
       avatar: course.instructor_avatar || null,
     },
     signatoryName: course.signatory_name || course.instructor_name || 'TELI Faculty',
+    tags: JSON.parse(course.tags || '[]'),
     createdBy: course.created_by || null,
     outcomes: JSON.parse(course.outcomes || '[]'),
     moduleCount: modules.length, lessonCount: totalLessons,
@@ -427,6 +428,7 @@ app.get('/api/courses', authOptional, ah(async (req, res) => {
       id: c.id, slug: c.slug, title: c.title, category: c.category, level: c.level, duration: c.duration,
       summary: c.summary, price: c.price, oldPrice: c.old_price, discount: c.discount, rating: c.rating,
       reviewsCount: c.reviews_count, color: c.color, icon: c.icon, image: c.image || null, visibility: c.visibility, published: c.published !== 0,
+      tags: JSON.parse(c.tags || '[]'),
       progress: prog?.percent ?? 0, enrolled: !!enr?.enrolled, saved: !!enr?.saved,
     });
   }
@@ -703,7 +705,25 @@ async function applyCourseExtras(courseId, b) {
       .run(b.instructor.name || null, b.instructor.title || null, b.instructor.bio || null, b.instructor.avatar || null, courseId);
   }
   if (b.signatoryName !== undefined) await db.prepare('UPDATE courses SET signatory_name=? WHERE id=?').run(b.signatoryName || null, courseId);
+  if (b.tags !== undefined) {
+    const tags = Array.isArray(b.tags) ? b.tags.map((t) => String(t).trim()).filter(Boolean).slice(0, 3) : [];
+    await db.prepare('UPDATE courses SET tags=? WHERE id=?').run(JSON.stringify(tags), courseId);
+  }
 }
+
+// ----- tag categories -----
+app.get('/api/tags', authOptional, ah(async (_req, res) => {
+  const rows = await db.prepare('SELECT label FROM tags ORDER BY label').all();
+  res.json({ tags: rows.map((r) => r.label) });
+}));
+app.post('/api/admin/tags', authOptional, requireRole('admin', 'super_admin'), ah(async (req, res) => {
+  const label = String(req.body?.label || '').trim();
+  if (!label) return res.status(400).json({ error: 'Enter a tag name' });
+  if (label.length > 40) return res.status(400).json({ error: 'Tag is too long' });
+  await db.prepare('INSERT OR IGNORE INTO tags (label, created_by) VALUES (?,?)').run(label, req.user.id);
+  const rows = await db.prepare('SELECT label FROM tags ORDER BY label').all();
+  res.json({ tags: rows.map((r) => r.label) });
+}));
 
 app.put('/api/admin/courses/:id', authOptional, requireRole('admin', 'super_admin'), ah(async (req, res) => {
   const course = await db.prepare('SELECT * FROM courses WHERE id = ? OR slug = ?').get(req.params.id, req.params.id);

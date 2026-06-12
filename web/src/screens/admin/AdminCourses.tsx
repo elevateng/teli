@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Pencil, Trash2, X, Search, ListTree, Eye, EyeOff, Award, Ticket, Copy, Check, Power, Image as ImageIcon } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, Search, ListTree, Eye, EyeOff, Award, Ticket, Copy, Check, Power, Image as ImageIcon, Tag } from 'lucide-react';
 import { api, CourseCard, CourseDetail, AccessCode, resizeImage, naira } from '../../api';
 import { StatusBar, CourseThumb, Spinner, Avatar } from '../../components/ui';
 
@@ -84,13 +84,13 @@ interface Form {
   summary: string; description: string; color: string; icon: string; outcomes: string[];
   image: string | null;
   instructor: { name: string; title: string; bio: string; avatar: string | null };
-  signatoryName: string;
+  signatoryName: string; tags: string[];
   published: boolean; visibility: 'public' | 'private'; cert: { minProgress: string; minQuizScore: string; requireQuizzes: boolean };
 }
 const empty: Form = {
   title: '', category: 'Fundraising', level: 'Beginner', duration: '6 weeks', price: '20000', oldPrice: '',
   summary: '', description: '', color: 'navy', icon: 'target', outcomes: [],
-  image: null, instructor: { name: '', title: 'Instructor', bio: '', avatar: null }, signatoryName: '',
+  image: null, instructor: { name: '', title: 'Instructor', bio: '', avatar: null }, signatoryName: '', tags: [],
   published: true, visibility: 'public', cert: { minProgress: '100', minQuizScore: '0', requireQuizzes: true },
 };
 
@@ -109,7 +109,7 @@ function CourseEditor({ id, onClose, onSaved }: { id: number | 'new'; onClose: (
       outcomes: c.outcomes, published: c.published, visibility: c.visibility || 'public',
       image: c.image || null,
       instructor: { name: c.instructor.name, title: c.instructor.title, bio: c.instructor.bio, avatar: c.instructor.avatar },
-      signatoryName: c.signatoryName || '',
+      signatoryName: c.signatoryName || '', tags: c.tags || [],
       cert: { minProgress: String(c.cert.minProgress), minQuizScore: String(c.cert.minQuizScore), requireQuizzes: c.cert.requireQuizzes },
     }));
   }, [id]);
@@ -124,7 +124,7 @@ function CourseEditor({ id, onClose, onSaved }: { id: number | 'new'; onClose: (
         price: Number(f.price), oldPrice: f.oldPrice ? Number(f.oldPrice) : null,
         summary: f.summary, description: f.description || f.summary, color: f.color, icon: f.icon,
         outcomes: f.outcomes.filter(Boolean), published: f.published, visibility: f.visibility,
-        image: f.image, instructor: f.instructor, signatoryName: f.signatoryName,
+        image: f.image, instructor: f.instructor, signatoryName: f.signatoryName, tags: f.tags,
         cert: { minProgress: Number(f.cert.minProgress), minQuizScore: Number(f.cert.minQuizScore), requireQuizzes: f.cert.requireQuizzes },
       };
       if (id === 'new') await api.post('/admin/courses', payload);
@@ -198,6 +198,10 @@ function CourseEditor({ id, onClose, onSaved }: { id: number | 'new'; onClose: (
             <input className="field" placeholder="e.g. Ayo Okafor, Director" value={f.signatoryName} onChange={(e) => set('signatoryName', e.target.value)} />
           </L>
 
+          <L label="Tags (choose up to 3)">
+            <TagPicker selected={f.tags} onChange={(t) => set('tags', t)} />
+          </L>
+
           <L label="Icon">
             <div className="flex gap-2 flex-wrap">{ICONS.map((ic) => (
               <button key={ic} onClick={() => set('icon', ic)} className={`p-1 rounded-xl border-2 ${f.icon === ic ? 'border-brand' : 'border-transparent'}`}><CourseThumb icon={ic} color={f.color} size={40} /></button>
@@ -250,6 +254,46 @@ function CourseEditor({ id, onClose, onSaved }: { id: number | 'new'; onClose: (
 
 function L({ label, children }: { label: string; children: React.ReactNode }) {
   return <label className="block"><span className="text-sm font-bold text-navy">{label}</span><div className="mt-1.5">{children}</div></label>;
+}
+
+function TagPicker({ selected, onChange }: { selected: string[]; onChange: (t: string[]) => void }) {
+  const [all, setAll] = useState<string[]>([]);
+  const [adding, setAdding] = useState('');
+  useEffect(() => { api.get<{ tags: string[] }>('/tags').then((d) => setAll(d.tags)); }, []);
+
+  const toggle = (tag: string) => {
+    if (selected.includes(tag)) onChange(selected.filter((t) => t !== tag));
+    else if (selected.length < 3) onChange([...selected, tag]);
+  };
+  const createTag = async () => {
+    const label = adding.trim(); if (!label) return;
+    const { tags } = await api.post<{ tags: string[] }>('/admin/tags', { label });
+    setAll(tags); setAdding('');
+    if (selected.length < 3 && !selected.includes(label)) onChange([...selected, label]);
+  };
+
+  return (
+    <div>
+      <div className="flex flex-wrap gap-2">
+        {all.map((tag) => {
+          const on = selected.includes(tag);
+          const disabled = !on && selected.length >= 3;
+          return (
+            <button key={tag} type="button" onClick={() => toggle(tag)} disabled={disabled}
+              className={`chip border inline-flex items-center gap-1 ${on ? 'bg-brand text-white border-brand' : disabled ? 'border-black/10 text-black/30' : 'border-black/15 text-navy'}`}>
+              <Tag size={12} /> {tag}
+            </button>
+          );
+        })}
+      </div>
+      <p className="text-xs text-sub mt-2">{selected.length}/3 selected</p>
+      <div className="flex gap-2 mt-2">
+        <input className="field py-2 text-sm flex-1" value={adding} onChange={(e) => setAdding(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), createTag())} placeholder="Create a new tag category…" />
+        <button type="button" onClick={createTag} disabled={!adding.trim()} className="btn-primary px-4 py-2 text-sm disabled:opacity-50"><Plus size={15} /></button>
+      </div>
+    </div>
+  );
 }
 
 function AccessCodes({ course, onClose }: { course: CourseCard; onClose: () => void }) {

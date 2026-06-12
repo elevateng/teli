@@ -85,7 +85,7 @@ export interface CourseCard {
   id: number; slug: string; title: string; category: string; level: string; duration: string;
   summary: string; price: number; oldPrice: number | null; discount: string | null;
   rating: number; reviewsCount: number; color: string; icon: string; image?: string | null;
-  progress: number; enrolled: boolean; saved: boolean;
+  progress: number; enrolled: boolean; saved: boolean; tags?: string[];
   visibility?: 'public' | 'private'; published?: boolean;
 }
 export interface Instructor { name: string; title: string; bio: string; avatar: string | null; }
@@ -106,7 +106,7 @@ export interface CourseDetail extends Omit<CourseCard, 'progress'> {
   provider: string; description: string; outcomes: string[];
   moduleCount: number; lessonCount: number; estimatedTime: string;
   modules: ModuleNode[]; reviews: Review[]; myReview: { rating: number; body: string } | null;
-  instructor: Instructor; signatoryName: string; createdBy: number | null;
+  instructor: Instructor; signatoryName: string; createdBy: number | null; tags: string[];
   lastAccessed: string | null; progress: number; completedLessons: number; totalLessons: number;
   published: boolean; visibility: 'public' | 'private'; cert: CertConditions;
 }

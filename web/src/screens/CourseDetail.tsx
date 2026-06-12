@@ -71,6 +71,11 @@ export default function CourseDetail() {
         <b className="text-navy">{course.rating.toFixed(1)}</b>
         <span className="text-sub text-sm">({course.reviewsCount} reviews)</span>
       </div>
+      {course.tags && course.tags.length > 0 && (
+        <div className="px-5 mt-3 flex flex-wrap gap-2">
+          {course.tags.map((t) => <span key={t} className="chip bg-black/[0.05] text-navy">#{t}</span>)}
+        </div>
+      )}
 
       {/* enrolled progress */}
       {course.enrolled && (

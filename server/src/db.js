@@ -281,6 +281,12 @@ CREATE TABLE IF NOT EXISTS community_likes (
   user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   PRIMARY KEY (post_id, user_id)
 );
+CREATE TABLE IF NOT EXISTS tags (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  label       TEXT NOT NULL UNIQUE,
+  created_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
 `);
 
   // migrations for pre-existing databases
@@ -299,6 +305,7 @@ CREATE TABLE IF NOT EXISTS community_likes (
   await addColumn('courses', 'instructor_bio', 'instructor_bio TEXT');
   await addColumn('courses', 'instructor_avatar', 'instructor_avatar TEXT'); // data URL
   await addColumn('courses', 'signatory_name', 'signatory_name TEXT'); // name signed on certificates
+  await addColumn('courses', 'tags', "tags TEXT NOT NULL DEFAULT '[]'"); // up to 3 tag labels (JSON array)
   // personal (user-owned) coupons, e.g. referral rewards
   await addColumn('coupons', 'user_id', 'user_id INTEGER'); // null = public coupon
   await addColumn('coupons', 'label', 'label TEXT');
@@ -312,4 +319,12 @@ CREATE TABLE IF NOT EXISTS community_likes (
   await addColumn('courses', 'cert_require_quizzes', 'cert_require_quizzes INTEGER NOT NULL DEFAULT 1');
   await addColumn('courses', 'published', 'published INTEGER NOT NULL DEFAULT 1');
   await addColumn('lessons', 'resources', "resources TEXT NOT NULL DEFAULT '[]'");
+
+  // seed a starter set of tag categories the first time
+  const tagCount = Number((await client.execute('SELECT COUNT(*) c FROM tags')).rows[0].c);
+  if (tagCount === 0) {
+    for (const label of ['Fundraising', 'Leadership', 'Monitoring & Evaluation', 'Grant Writing', 'Advocacy', 'Project Management', 'Finance', 'Communications', 'Governance', 'Volunteering']) {
+      await client.execute({ sql: 'INSERT OR IGNORE INTO tags (label) VALUES (?)', args: [label] });
+    }
+  }
 }
