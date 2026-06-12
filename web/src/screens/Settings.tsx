@@ -1,8 +1,8 @@
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Lock, Save, CheckCircle2, LogOut, Camera, Trash2 } from 'lucide-react';
+import { User, Lock, Save, CheckCircle2, LogOut, Camera, Trash2, Info, Mail } from 'lucide-react';
 import { api, User as TUser, resizeImage } from '../api';
-import { TopBar, Avatar } from '../components/ui';
+import { TopBar, Avatar, BookMark } from '../components/ui';
 import { useAuth } from '../auth';
 
 export default function Settings() {
@@ -85,6 +85,25 @@ export default function Settings() {
             <input type="password" className="field mt-1.5" value={next} onChange={(e) => setNext(e.target.value)} placeholder="At least 8 characters" /></label>
           <button onClick={changePw} disabled={!next} className="btn-navy w-full mt-4 disabled:opacity-50">Update Password</button>
           {pwMsg && <p className="text-sm text-emerald-600 mt-2 flex items-center gap-1"><CheckCircle2 size={15} /> {pwMsg}</p>}
+        </div>
+
+        <div className="card p-5">
+          <h2 className="font-extrabold text-navy flex items-center gap-2 mb-3"><Info size={18} /> About TELI</h2>
+          <div className="flex items-center gap-3 mb-3">
+            <BookMark size={40} />
+            <div className="leading-tight">
+              <p className="font-extrabold text-navy text-lg">TELI</p>
+              <p className="text-xs text-sub">The Elevate Learning Institute</p>
+            </div>
+          </div>
+          <p className="text-sm text-sub leading-relaxed">
+            TELI — The Elevate Learning Institute — delivers practical, accessible training for
+            social-impact professionals and changemakers. Learn, lead, and elevate your impact.
+          </p>
+          <p className="text-sm text-navy font-semibold mt-3">An initiative of Elevate Development Foundation.</p>
+          <div className="flex items-center gap-2 mt-3 text-xs text-sub">
+            <Mail size={14} /> <a href="mailto:teli@elevateng.org" className="text-brand font-semibold">teli@elevateng.org</a>
+          </div>
         </div>
 
         <button onClick={() => { logout(); nav('/'); }} className="w-full flex items-center justify-center gap-2 text-red-500 font-bold py-3 border border-red-200 rounded-2xl">

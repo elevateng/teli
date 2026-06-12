@@ -128,7 +128,8 @@ async function getCourseDetail(slugOrId, userId) {
     ? await db.prepare('SELECT * FROM enrollments WHERE user_id = ? AND course_id = ?').get(userId, course.id)
     : null;
   const progress = totalLessons ? Math.round((completedLessons / totalLessons) * 100) : 0;
-  const reviews = await db.prepare('SELECT author,rating,body,created_at FROM reviews WHERE course_id = ? ORDER BY id').all(course.id);
+  const reviews = await db.prepare('SELECT author,rating,body,created_at FROM reviews WHERE course_id = ? ORDER BY id DESC').all(course.id);
+  const myReview = userId ? await db.prepare('SELECT rating, body FROM reviews WHERE course_id = ? AND user_id = ?').get(course.id, userId) : null;
 
   return {
     id: course.id, slug: course.slug, title: course.title, category: course.category,
@@ -136,10 +137,19 @@ async function getCourseDetail(slugOrId, userId) {
     summary: course.summary, description: course.description,
     price: course.price, oldPrice: course.old_price, discount: course.discount,
     rating: course.rating, reviewsCount: course.reviews_count, color: course.color, icon: course.icon,
+    image: course.image || null,
+    instructor: {
+      name: course.instructor_name || course.provider,
+      title: course.instructor_title || 'Instructor',
+      bio: course.instructor_bio || 'Experienced social-impact practitioner.',
+      avatar: course.instructor_avatar || null,
+    },
+    signatoryName: course.signatory_name || course.instructor_name || 'TELI Faculty',
+    createdBy: course.created_by || null,
     outcomes: JSON.parse(course.outcomes || '[]'),
     moduleCount: modules.length, lessonCount: totalLessons,
     estimatedTime: formatDuration(totalSeconds),
-    modules: moduleTree, reviews,
+    modules: moduleTree, reviews, myReview: myReview || null,
     enrolled: !!enrollment?.enrolled, saved: !!enrollment?.saved,
     lastAccessed: enrollment?.last_accessed || null,
     progress, completedLessons, totalLessons,
@@ -272,6 +282,9 @@ app.post('/api/auth/register', ah(async (req, res) => {
     .run(fullName, String(email).toLowerCase(), hash);
   const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid);
   await applyReferral(req.body?.ref, user);
+  await notify(user.id, 'system', 'Welcome to TELI 👋', 'Your account is ready. Explore courses and start learning.', '/explore');
+  sendMail({ to: user.email, subject: 'Welcome to TELI 🎓', title: `Welcome, ${firstName(fullName)}!`,
+    html: `<p>Hi ${firstName(fullName)},</p><p>Your TELI account is ready. You can now explore courses, learn at your own pace, and earn certificates.</p><p><a href="${config.APP_URL}/explore" style="background:#F26419;color:#fff;padding:12px 20px;border-radius:10px;text-decoration:none;display:inline-block">Browse courses</a></p><p style="color:#5b6577;font-size:13px">Practical training for social-impact professionals — by Elevate Development Foundation.</p>` });
   res.json({ token: sign(user), user: publicUser(user) });
 }));
 
@@ -413,7 +426,7 @@ app.get('/api/courses', authOptional, ah(async (req, res) => {
     courses.push({
       id: c.id, slug: c.slug, title: c.title, category: c.category, level: c.level, duration: c.duration,
       summary: c.summary, price: c.price, oldPrice: c.old_price, discount: c.discount, rating: c.rating,
-      reviewsCount: c.reviews_count, color: c.color, icon: c.icon, visibility: c.visibility, published: c.published !== 0,
+      reviewsCount: c.reviews_count, color: c.color, icon: c.icon, image: c.image || null, visibility: c.visibility, published: c.published !== 0,
       progress: prog?.percent ?? 0, enrolled: !!enr?.enrolled, saved: !!enr?.saved,
     });
   }
@@ -453,6 +466,32 @@ app.post('/api/courses/:id/save', authOptional, authRequired, ah(async (req, res
     ON CONFLICT(user_id,course_id) DO UPDATE SET saved = ?
   `).run(req.user.id, course.id, newSaved, newSaved);
   res.json({ saved: !!newSaved });
+}));
+
+// ----------------------------- reviews -----------------------------
+async function recomputeCourseRating(courseId) {
+  const r = await db.prepare('SELECT COUNT(*) c, COALESCE(AVG(rating),0) a FROM reviews WHERE course_id = ?').get(courseId);
+  await db.prepare('UPDATE courses SET rating = ?, reviews_count = ? WHERE id = ?')
+    .run(r.c ? Math.round(r.a * 10) / 10 : 0, r.c, courseId);
+}
+
+// a learner who is enrolled can leave / update one review per course
+app.post('/api/courses/:id/review', authOptional, authRequired, ah(async (req, res) => {
+  const course = await db.prepare('SELECT * FROM courses WHERE id = ? OR slug = ?').get(req.params.id, req.params.id);
+  if (!course) return res.status(404).json({ error: 'Course not found' });
+  const enrolled = await db.prepare('SELECT 1 FROM enrollments WHERE user_id = ? AND course_id = ? AND enrolled = 1').get(req.user.id, course.id);
+  if (!enrolled) return res.status(403).json({ error: 'You can only review a course you’re enrolled in' });
+  const rating = Math.max(1, Math.min(5, Number(req.body?.rating) || 0));
+  const body = String(req.body?.body || '').trim().slice(0, 1000);
+  if (!rating) return res.status(400).json({ error: 'Please choose a star rating' });
+  const existing = await db.prepare('SELECT id FROM reviews WHERE course_id = ? AND user_id = ?').get(course.id, req.user.id);
+  if (existing) {
+    await db.prepare('UPDATE reviews SET rating = ?, body = ?, author = ? WHERE id = ?').run(rating, body, req.user.full_name, existing.id);
+  } else {
+    await db.prepare('INSERT INTO reviews (course_id,author,rating,body,user_id) VALUES (?,?,?,?,?)').run(course.id, req.user.full_name, rating, body, req.user.id);
+  }
+  await recomputeCourseRating(course.id);
+  res.json({ course: await getCourseDetail(course.id, req.user.id) });
 }));
 
 // ----------------------------- my learning -----------------------------
@@ -581,10 +620,13 @@ app.get('/api/me/achievements', authOptional, authRequired, ah(async (req, res) 
 
 app.get('/api/me/certificates', authOptional, authRequired, ah(async (req, res) => {
   const rows = await db.prepare(`
-    SELECT c.issued_at, co.title, co.slug, co.category FROM certificates c
+    SELECT c.issued_at, co.title, co.slug, co.category, co.signatory_name, co.instructor_name, co.provider FROM certificates c
     JOIN courses co ON co.id = c.course_id WHERE c.user_id = ? ORDER BY c.issued_at DESC, c.id DESC
   `).all(req.user.id);
-  res.json({ certificates: rows.map((r) => ({ title: r.title, slug: r.slug, category: r.category, issuedAt: r.issued_at, recipient: req.user.full_name })) });
+  res.json({ certificates: rows.map((r) => ({
+    title: r.title, slug: r.slug, category: r.category, issuedAt: r.issued_at, recipient: req.user.full_name,
+    signatory: r.signatory_name || r.instructor_name || 'TELI Faculty', provider: r.provider,
+  })) });
 }));
 
 // ===================================================================
@@ -640,6 +682,7 @@ app.post('/api/admin/courses', authOptional, requireRole('admin', 'super_admin')
     discount: b.discount || null, rating: Number(b.rating) || 4.8, reviews_count: Number(b.reviewsCount) || 0,
     color: b.color || 'navy', icon: b.icon || 'target', outcomes: JSON.stringify(b.outcomes || []),
   });
+  await db.prepare('UPDATE courses SET created_by=? WHERE id=?').run(req.user.id, info.lastInsertRowid);
   if (b.cert) {
     await db.prepare('UPDATE courses SET cert_min_progress=?, cert_min_quiz_score=?, cert_require_quizzes=? WHERE id=?')
       .run(Number(b.cert.minProgress) || 100, Number(b.cert.minQuizScore) || 0, b.cert.requireQuizzes === false ? 0 : 1, info.lastInsertRowid);
@@ -647,9 +690,20 @@ app.post('/api/admin/courses', authOptional, requireRole('admin', 'super_admin')
   if (b.visibility === 'private' || b.visibility === 'public') {
     await db.prepare('UPDATE courses SET visibility=? WHERE id=?').run(b.visibility, info.lastInsertRowid);
   }
+  await applyCourseExtras(info.lastInsertRowid, b);
   await audit(req.user, 'course.create', b.title, 'course', info.lastInsertRowid);
   res.json({ course: await getCourseDetail(info.lastInsertRowid, null) });
 }));
+
+// image + instructor + signatory fields (shared by create & update)
+async function applyCourseExtras(courseId, b) {
+  if (b.image !== undefined) await db.prepare('UPDATE courses SET image=? WHERE id=?').run(b.image || null, courseId);
+  if (b.instructor) {
+    await db.prepare('UPDATE courses SET instructor_name=?, instructor_title=?, instructor_bio=?, instructor_avatar=? WHERE id=?')
+      .run(b.instructor.name || null, b.instructor.title || null, b.instructor.bio || null, b.instructor.avatar || null, courseId);
+  }
+  if (b.signatoryName !== undefined) await db.prepare('UPDATE courses SET signatory_name=? WHERE id=?').run(b.signatoryName || null, courseId);
+}
 
 app.put('/api/admin/courses/:id', authOptional, requireRole('admin', 'super_admin'), ah(async (req, res) => {
   const course = await db.prepare('SELECT * FROM courses WHERE id = ? OR slug = ?').get(req.params.id, req.params.id);
@@ -676,6 +730,7 @@ app.put('/api/admin/courses/:id', authOptional, requireRole('admin', 'super_admi
     cmq: b.cert ? Number(b.cert.minQuizScore) || 0 : course.cert_min_quiz_score,
     crq: b.cert ? (b.cert.requireQuizzes === false ? 0 : 1) : course.cert_require_quizzes,
   });
+  await applyCourseExtras(course.id, b);
   await audit(req.user, 'course.update', course.title, 'course', course.id);
   res.json({ course: await getCourseDetail(course.id, null) });
 }));
@@ -683,6 +738,10 @@ app.put('/api/admin/courses/:id', authOptional, requireRole('admin', 'super_admi
 app.delete('/api/admin/courses/:id', authOptional, requireRole('admin', 'super_admin'), ah(async (req, res) => {
   const course = await db.prepare('SELECT * FROM courses WHERE id = ? OR slug = ?').get(req.params.id, req.params.id);
   if (!course) return res.status(404).json({ error: 'Course not found' });
+  // Admins can delete only courses they created; super admins can delete any.
+  if (req.user.role !== 'super_admin' && course.created_by && course.created_by !== req.user.id) {
+    return res.status(403).json({ error: 'You can only delete courses you created' });
+  }
   // explicit cleanup (works whether or not the engine cascades)
   await db.prepare('DELETE FROM lessons WHERE module_id IN (SELECT id FROM modules WHERE course_id = ?)').run(course.id);
   await db.prepare('DELETE FROM modules WHERE course_id = ?').run(course.id);
@@ -1195,12 +1254,27 @@ app.post('/api/webhooks/paystack', ah(async (req, res) => {
 // ===================================================================
 async function ticketView(t) {
   const messages = await db.prepare('SELECT author_name,author_role,body,created_at FROM ticket_messages WHERE ticket_id = ? ORDER BY id').all(t.id);
+  const courseTitle = t.course_id ? (await db.prepare('SELECT title FROM courses WHERE id = ?').get(t.course_id))?.title : null;
   return {
-    id: t.id, subject: t.subject, category: t.category, priority: t.priority, status: t.status,
+    id: t.id, reference: t.reference || `T-${String(t.id).padStart(5, '0')}`,
+    subject: t.subject, category: t.category, priority: t.priority, status: t.status,
+    courseId: t.course_id || null, courseTitle,
     createdAt: t.created_at, updatedAt: t.updated_at,
     user: t.full_name ? { id: t.user_id, name: t.full_name, email: t.email } : undefined,
     messages: messages.map((m) => ({ author: m.author_name, role: m.author_role, body: m.body, at: m.created_at })),
   };
+}
+
+// notify the relevant staff about a ticket: the linked course's creator + all super admins
+async function notifyStaffForTicket(ticket, title, body) {
+  const recipients = new Set();
+  const supers = await db.prepare("SELECT id FROM users WHERE role = 'super_admin'").all();
+  supers.forEach((u) => recipients.add(u.id));
+  if (ticket.course_id) {
+    const course = await db.prepare('SELECT created_by FROM courses WHERE id = ?').get(ticket.course_id);
+    if (course?.created_by) recipients.add(course.created_by);
+  }
+  for (const uid of recipients) await notify(uid, 'ticket', title, body, '/admin/tickets');
 }
 
 app.get('/api/tickets', authOptional, authRequired, ah(async (req, res) => {
@@ -1211,13 +1285,18 @@ app.get('/api/tickets', authOptional, authRequired, ah(async (req, res) => {
 }));
 
 app.post('/api/tickets', authOptional, authRequired, ah(async (req, res) => {
-  const { subject, category, priority, message } = req.body || {};
+  const { subject, category, priority, message, courseId } = req.body || {};
   if (!subject || !message) return res.status(400).json({ error: 'Subject and message are required' });
-  const info = await db.prepare('INSERT INTO tickets (user_id,subject,category,priority) VALUES (?,?,?,?)')
-    .run(req.user.id, subject, category || 'General', priority || 'normal');
+  let cId = null;
+  if (courseId) cId = (await db.prepare('SELECT id FROM courses WHERE id = ? OR slug = ?').get(courseId, courseId))?.id || null;
+  const reference = 'TKT-' + crypto.randomBytes(3).toString('hex').toUpperCase();
+  const info = await db.prepare('INSERT INTO tickets (user_id,subject,category,priority,reference,course_id) VALUES (?,?,?,?,?,?)')
+    .run(req.user.id, subject, category || 'General', priority || 'normal', reference, cId);
   await db.prepare('INSERT INTO ticket_messages (ticket_id,author_id,author_name,author_role,body) VALUES (?,?,?,?,?)')
     .run(info.lastInsertRowid, req.user.id, req.user.full_name, req.user.role, message);
-  res.json({ ticket: await ticketView(await db.prepare('SELECT * FROM tickets WHERE id = ?').get(info.lastInsertRowid)) });
+  const ticket = await db.prepare('SELECT * FROM tickets WHERE id = ?').get(info.lastInsertRowid);
+  await notifyStaffForTicket(ticket, `New ticket ${reference}`, `${req.user.full_name}: “${subject}”`);
+  res.json({ ticket: await ticketView(ticket) });
 }));
 
 app.post('/api/tickets/:id/reply', authOptional, authRequired, ah(async (req, res) => {
@@ -1232,19 +1311,25 @@ app.post('/api/tickets/:id/reply', authOptional, authRequired, ah(async (req, re
     .run(isStaff ? 'pending' : 'open', t.id);
   if (isStaff) {
     const owner = await db.prepare('SELECT full_name, email FROM users WHERE id = ?').get(t.user_id);
-    await notify(t.user_id, 'ticket', 'Support replied to your ticket', `“${t.subject}” has a new reply.`, '/support');
+    await notify(t.user_id, 'ticket', 'Support replied to your ticket', `${t.reference || ''} — “${t.subject}” has a new reply.`, '/support');
     if (owner) sendMail({ to: owner.email, subject: `Re: ${t.subject}`, title: 'Support has replied',
       html: `<p>Hi ${owner.full_name.split(' ')[0]},</p><p>Our team replied to your ticket <b>“${t.subject}”</b>:</p><blockquote style="border-left:3px solid #F26419;padding-left:12px;color:#5b6577">${req.body.body}</blockquote><p><a href="${config.APP_URL}/support">View conversation</a></p>` });
+  } else {
+    // learner replied — let the relevant staff know
+    await notifyStaffForTicket(t, `Reply on ${t.reference || 'ticket'}`, `${req.user.full_name}: “${t.subject}”`);
   }
   res.json({ ticket: await ticketView(await db.prepare('SELECT t.*, u.full_name, u.email FROM tickets t JOIN users u ON u.id=t.user_id WHERE t.id = ?').get(t.id)) });
 }));
 
 app.get('/api/admin/tickets', authOptional, requireRole('admin', 'super_admin'), ah(async (req, res) => {
+  const where = [], args = {};
+  if (req.query.status) { where.push('t.status = @status'); args.status = req.query.status; }
+  if (req.query.q) { where.push('(t.reference LIKE @q OR t.subject LIKE @q OR u.full_name LIKE @q OR u.email LIKE @q)'); args.q = `%${req.query.q}%`; }
   const rows = await db.prepare(`
     SELECT t.*, u.full_name, u.email FROM tickets t JOIN users u ON u.id = t.user_id
-    ${req.query.status ? 'WHERE t.status = @status' : ''} ORDER BY
+    ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY
     CASE t.status WHEN 'open' THEN 0 WHEN 'pending' THEN 1 WHEN 'resolved' THEN 2 ELSE 3 END, t.updated_at DESC
-  `).all(req.query.status ? { status: req.query.status } : {});
+  `).all(args);
   const tickets = [];
   for (const t of rows) tickets.push(await ticketView(t));
   res.json({ tickets });

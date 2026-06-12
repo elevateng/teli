@@ -5,7 +5,7 @@ import {
   ChevronDown, FileText, HelpCircle, Award, Play, Lock, ArrowRight, Circle,
 } from 'lucide-react';
 import { api, CourseDetail as CD, LessonNode, naira, shareOrCopy } from '../api';
-import { CourseThumb, ProgressBar, Spinner, Wordmark } from '../components/ui';
+import { CourseThumb, ProgressBar, Spinner, Wordmark, Avatar } from '../components/ui';
 
 const TABS = ['Overview', 'Curriculum', 'Instructor', 'Reviews'] as const;
 
@@ -58,7 +58,7 @@ export default function CourseDetail() {
           <h1 className="text-[27px] font-extrabold text-navy leading-tight mt-3">{course.title}</h1>
           <p className="text-sub mt-2 text-sm">{course.summary}</p>
         </div>
-        <CourseThumb icon={course.icon} color={course.color} size={120} />
+        <CourseThumb icon={course.icon} color={course.color} size={120} image={course.image} />
       </div>
 
       <div className="px-5 mt-4 flex flex-wrap gap-2">
@@ -99,7 +99,7 @@ export default function CourseDetail() {
         {tab === 'Overview' && <Overview course={course} />}
         {tab === 'Curriculum' && <Curriculum course={course} slug={slug!} />}
         {tab === 'Instructor' && <Instructor course={course} />}
-        {tab === 'Reviews' && <Reviews course={course} />}
+        {tab === 'Reviews' && <Reviews course={course} onChanged={load} />}
       </div>
 
       {/* sticky action */}
@@ -213,42 +213,73 @@ function Curriculum({ course, slug }: { course: CD; slug: string }) {
 }
 
 function Instructor({ course }: { course: CD }) {
+  const ins = course.instructor;
   return (
     <div className="fade-up">
       <div className="card p-5 flex items-center gap-4">
-        <div className="w-16 h-16 rounded-full bg-navy text-white flex items-center justify-center text-2xl font-extrabold">E</div>
+        <Avatar name={ins.name} src={ins.avatar} size={64} />
         <div>
-          <h3 className="font-extrabold text-navy text-lg">{course.provider}</h3>
-          <p className="text-sub text-sm">Faculty &amp; Practitioners</p>
-          <div className="flex items-center gap-1 mt-1 text-sm"><Star size={15} className="text-amber-400 fill-amber-400" /> {course.rating.toFixed(1)} instructor rating</div>
+          <h3 className="font-extrabold text-navy text-lg">{ins.name}</h3>
+          <p className="text-sub text-sm">{ins.title}</p>
+          {course.reviewsCount > 0 && <div className="flex items-center gap-1 mt-1 text-sm"><Star size={15} className="text-amber-400 fill-amber-400" /> {course.rating.toFixed(1)} ({course.reviewsCount})</div>}
         </div>
       </div>
-      <p className="text-sub mt-4 leading-relaxed">
-        Courses are taught by experienced social-impact practitioners who combine real fieldwork with
-        practical frameworks you can apply immediately in your organization.
-      </p>
+      <p className="text-sub mt-4 leading-relaxed">{ins.bio}</p>
+      <p className="text-xs text-sub mt-3">Offered by {course.provider}.</p>
     </div>
   );
 }
 
-function Reviews({ course }: { course: CD }) {
+function Reviews({ course, onChanged }: { course: CD; onChanged: () => void }) {
+  const [rating, setRating] = useState(course.myReview?.rating || 0);
+  const [body, setBody] = useState(course.myReview?.body || '');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const submit = async () => {
+    if (!rating) return setErr('Please tap a star rating.');
+    setBusy(true); setErr('');
+    try { await api.post(`/courses/${course.id}/review`, { rating, body }); onChanged(); }
+    catch (e: any) { setErr(e.message); } finally { setBusy(false); }
+  };
+
   return (
     <div className="space-y-4 fade-up">
       <div className="flex items-center gap-3">
-        <span className="text-4xl font-extrabold text-navy">{course.rating.toFixed(1)}</span>
-        <div>
-          <div className="flex">{Array.from({ length: 5 }).map((_, i) => <Star key={i} size={16} className={i < Math.round(course.rating) ? 'text-amber-400 fill-amber-400' : 'text-black/15'} />)}</div>
-          <p className="text-sm text-sub">{course.reviewsCount} reviews</p>
-        </div>
+        {course.reviewsCount > 0 ? (
+          <>
+            <span className="text-4xl font-extrabold text-navy">{course.rating.toFixed(1)}</span>
+            <div>
+              <div className="flex">{Array.from({ length: 5 }).map((_, i) => <Star key={i} size={16} className={i < Math.round(course.rating) ? 'text-amber-400 fill-amber-400' : 'text-black/15'} />)}</div>
+              <p className="text-sm text-sub">{course.reviewsCount} review{course.reviewsCount === 1 ? '' : 's'}</p>
+            </div>
+          </>
+        ) : <p className="text-sub">No ratings yet — be the first to review.</p>}
       </div>
-      {course.reviews.length === 0 && <p className="text-sub text-sm">No written reviews yet — be the first!</p>}
+
+      {/* write a review (enrolled learners only) */}
+      {course.enrolled && (
+        <div className="card p-4">
+          <p className="font-bold text-navy text-sm mb-2">{course.myReview ? 'Your review' : 'Rate this course'}</p>
+          <div className="flex gap-1.5 mb-3">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <button key={i} onClick={() => setRating(i + 1)}><Star size={28} className={i < rating ? 'text-amber-400 fill-amber-400' : 'text-black/15'} /></button>
+            ))}
+          </div>
+          <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Share what you thought (optional)…" className="field h-20 text-sm" />
+          {err && <p className="text-sm text-red-500 mt-1">{err}</p>}
+          <button onClick={submit} disabled={busy} className="btn-primary w-full mt-3">{busy ? 'Saving…' : course.myReview ? 'Update review' : 'Submit review'}</button>
+        </div>
+      )}
+
+      {course.reviews.length === 0 && !course.enrolled && <p className="text-sub text-sm">No written reviews yet.</p>}
       {course.reviews.map((r, i) => (
         <div key={i} className="card p-4">
           <div className="flex items-center justify-between">
             <span className="font-bold text-navy">{r.author}</span>
             <div className="flex">{Array.from({ length: 5 }).map((_, j) => <Star key={j} size={13} className={j < r.rating ? 'text-amber-400 fill-amber-400' : 'text-black/15'} />)}</div>
           </div>
-          <p className="text-sub text-sm mt-1.5">{r.body}</p>
+          {r.body && <p className="text-sub text-sm mt-1.5">{r.body}</p>}
         </div>
       ))}
     </div>

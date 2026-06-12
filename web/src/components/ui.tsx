@@ -21,7 +21,10 @@ export const COLOR_FG: Record<string, string> = {
   green: 'text-emerald-600', sand: 'text-amber-600', blue: 'text-indigo-600',
 };
 
-export function CourseThumb({ icon, color, size = 56, rounded = 'rounded-2xl' }: { icon: string; color: string; size?: number; rounded?: string }) {
+export function CourseThumb({ icon, color, size = 56, rounded = 'rounded-2xl', image }: { icon: string; color: string; size?: number; rounded?: string; image?: string | null }) {
+  if (image) {
+    return <img src={image} alt="" className={`${rounded} object-cover shrink-0`} style={{ width: size, height: size }} />;
+  }
   const Ico = ICONS[icon] || Target;
   return (
     <div className={`${COLOR_BG[color] || 'bg-navy/10'} ${rounded} flex items-center justify-center shrink-0`} style={{ width: size, height: size }}>

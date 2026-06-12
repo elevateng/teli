@@ -34,10 +34,10 @@ async function course(data, modules = [], reviews = []) {
   if (skipCatalog) return null;
   const defaults = {
     provider: 'The Elevate Learning Institute', level: 'Beginner', duration: '6 weeks',
-    old_price: null, discount: null, rating: 4.8, reviews_count: 0, color: 'navy',
-    icon: 'target', outcomes: [],
+    old_price: null, discount: null, color: 'navy', icon: 'target', outcomes: [],
   };
-  const row = { ...defaults, ...data, outcomes: JSON.stringify(data.outcomes ?? []) };
+  // Courses start with no rating/reviews — those come only from real students.
+  const row = { ...defaults, ...data, rating: 0, reviews_count: 0, outcomes: JSON.stringify(data.outcomes ?? []) };
   const courseId = (await insCourse.run(row)).lastInsertRowid;
   for (let mi = 0; mi < modules.length; mi++) {
     const m = modules[mi];
@@ -48,7 +48,7 @@ async function course(data, modules = [], reviews = []) {
       await insLesson.run(moduleId, li + 1, l.title, l.kind ?? 'reading', l.duration ?? '05:00', JSON.stringify(l.body ?? {}));
     }
   }
-  for (const r of reviews) await insReview.run(courseId, r.author, r.rating, r.body);
+  void reviews; // demo reviews are intentionally not seeded
   return courseId;
 }
 

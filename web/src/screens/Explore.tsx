@@ -89,7 +89,7 @@ export default function Explore() {
       <div className="px-5 mt-3 space-y-4">
         {!courses ? <Spinner /> : courses.map((c) => (
           <button key={c.id} onClick={() => nav(`/course/${c.slug}`)} className="w-full card p-4 flex gap-4 text-left">
-            <CourseThumb icon={c.icon} color={c.color} size={92} rounded="rounded-2xl" />
+            <CourseThumb icon={c.icon} color={c.color} size={92} rounded="rounded-2xl" image={c.image} />
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-2">
                 <span className="text-[11px] font-bold uppercase tracking-wide text-navy/70">{c.category}</span>

@@ -84,10 +84,11 @@ export interface AdminUser {
 export interface CourseCard {
   id: number; slug: string; title: string; category: string; level: string; duration: string;
   summary: string; price: number; oldPrice: number | null; discount: string | null;
-  rating: number; reviewsCount: number; color: string; icon: string;
+  rating: number; reviewsCount: number; color: string; icon: string; image?: string | null;
   progress: number; enrolled: boolean; saved: boolean;
   visibility?: 'public' | 'private'; published?: boolean;
 }
+export interface Instructor { name: string; title: string; bio: string; avatar: string | null; }
 
 export type LessonKind = 'reading' | 'video' | 'activity' | 'quiz';
 export interface LessonNode {
@@ -104,7 +105,8 @@ export interface CertConditions { minProgress: number; minQuizScore: number; req
 export interface CourseDetail extends Omit<CourseCard, 'progress'> {
   provider: string; description: string; outcomes: string[];
   moduleCount: number; lessonCount: number; estimatedTime: string;
-  modules: ModuleNode[]; reviews: Review[];
+  modules: ModuleNode[]; reviews: Review[]; myReview: { rating: number; body: string } | null;
+  instructor: Instructor; signatoryName: string; createdBy: number | null;
   lastAccessed: string | null; progress: number; completedLessons: number; totalLessons: number;
   published: boolean; visibility: 'public' | 'private'; cert: CertConditions;
 }
@@ -123,7 +125,7 @@ export interface Dashboard {
 }
 
 export interface Achievement { code: string; title: string; detail: string; icon: string; earned_at: string; }
-export interface Certificate { title: string; slug: string; category: string; issuedAt: string; recipient: string; }
+export interface Certificate { title: string; slug: string; category: string; issuedAt: string; recipient: string; signatory: string; provider: string; }
 
 export interface QuizResult {
   score: number; total: number; percent: number; passed: boolean; timeTaken: string | null;
@@ -148,7 +150,9 @@ export interface Quote { base: number; discount: number; amount: number; applied
 
 export interface TicketMessage { author: string; role: Role; body: string; at: string; }
 export interface Ticket {
-  id: number; subject: string; category: string; priority: string; status: 'open' | 'pending' | 'resolved' | 'closed';
+  id: number; reference: string; subject: string; category: string; priority: string;
+  status: 'open' | 'pending' | 'resolved' | 'closed';
+  courseId: number | null; courseTitle: string | null;
   createdAt: string; updatedAt: string; messages: TicketMessage[];
   user?: { id: number; name: string; email: string };
 }

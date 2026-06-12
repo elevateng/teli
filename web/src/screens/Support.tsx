@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Plus, X, Send, LifeBuoy, ChevronRight } from 'lucide-react';
-import { api, Ticket } from '../api';
+import { Plus, X, Send, LifeBuoy, ChevronRight, Mail } from 'lucide-react';
+import { api, Ticket, CourseCard } from '../api';
 import { TopBar, Spinner } from '../components/ui';
 import { useNavigate } from 'react-router-dom';
 
@@ -26,6 +26,11 @@ export default function Support() {
       <div className="px-5 py-5 flex-1">
         <button onClick={() => setCreating(true)} className="btn-primary w-full"><Plus size={18} /> New Support Ticket</button>
 
+        <a href="mailto:teli@elevateng.org" className="mt-3 w-full flex items-center gap-3 rounded-2xl bg-black/[0.03] px-4 py-3">
+          <Mail size={18} className="text-brand shrink-0" />
+          <div className="flex-1"><p className="text-sm font-bold text-navy leading-tight">Prefer email?</p><p className="text-xs text-sub">teli@elevateng.org</p></div>
+        </a>
+
         <h2 className="font-extrabold text-navy text-lg mt-6 mb-3">Your Tickets</h2>
         {!tickets ? <Spinner /> : tickets.length === 0 ? (
           <div className="card p-8 text-center text-sub">
@@ -39,10 +44,10 @@ export default function Support() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className={`chip ${STATUS_STYLE[t.status]}`}>{t.status}</span>
-                    <span className="text-xs text-sub">{t.category}</span>
+                    <span className="text-[11px] font-mono text-sub">{t.reference}</span>
                   </div>
                   <p className="font-bold text-navy mt-1.5 leading-tight truncate">{t.subject}</p>
-                  <p className="text-xs text-sub truncate">{t.messages[t.messages.length - 1]?.body}</p>
+                  <p className="text-xs text-sub truncate">{t.courseTitle ? `${t.courseTitle} · ` : ''}{t.messages[t.messages.length - 1]?.body}</p>
                 </div>
                 <ChevronRight size={20} className="text-sub" />
               </button>
@@ -60,12 +65,16 @@ function NewTicket({ onClose, onCreated }: { onClose: () => void; onCreated: (t:
   const [category, setCategory] = useState('General');
   const [priority, setPriority] = useState('normal');
   const [message, setMessage] = useState('');
+  const [courseId, setCourseId] = useState('');
+  const [courses, setCourses] = useState<CourseCard[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
+  useEffect(() => { api.get<{ inProgress: any[]; completed: any[] }>('/me/learning').then((d) => setCourses([...d.inProgress, ...d.completed] as any)); }, []);
+
   const submit = async () => {
     setBusy(true); setError('');
-    try { const { ticket } = await api.post<{ ticket: Ticket }>('/tickets', { subject, category, priority, message }); onCreated(ticket); }
+    try { const { ticket } = await api.post<{ ticket: Ticket }>('/tickets', { subject, category, priority, message, courseId: courseId || undefined }); onCreated(ticket); }
     catch (e: any) { setError(e.message); } finally { setBusy(false); }
   };
 
@@ -87,6 +96,12 @@ function NewTicket({ onClose, onCreated }: { onClose: () => void; onCreated: (t:
               {['low', 'normal', 'high'].map((c) => <option key={c} value={c}>{c[0].toUpperCase() + c.slice(1)} priority</option>)}
             </select>
           </div>
+          {courses.length > 0 && (
+            <select className="field" value={courseId} onChange={(e) => setCourseId(e.target.value)}>
+              <option value="">Not about a specific course</option>
+              {courses.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
+            </select>
+          )}
           <textarea className="field h-28" placeholder="Describe your issue…" value={message} onChange={(e) => setMessage(e.target.value)} />
         </div>
         <button onClick={submit} disabled={busy || !subject || !message} className="btn-primary w-full mt-5 disabled:opacity-50">
@@ -115,7 +130,7 @@ export function TicketThread({ ticket, onBack, admin = false }: { ticket: Ticket
 
   return (
     <div className="flex flex-col min-h-full">
-      <TopBar title={t.subject} subtitle={`${t.category} · ${t.status}`} onBack={onBack} />
+      <TopBar title={t.subject} subtitle={`${t.reference} · ${t.status}${t.courseTitle ? ' · ' + t.courseTitle : ''}`} onBack={onBack} />
       {admin && (
         <div className="flex gap-2 px-5 py-3 border-b border-black/[0.05] overflow-x-auto no-scrollbar">
           {['open', 'pending', 'resolved', 'closed'].map((s) => (

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { LifeBuoy, ChevronRight } from 'lucide-react';
+import { LifeBuoy, ChevronRight, Search } from 'lucide-react';
 import { api, Ticket } from '../../api';
 import { StatusBar, Spinner } from '../../components/ui';
 import { TicketThread } from '../Support';
@@ -12,10 +12,15 @@ const STATUS_STYLE: Record<string, string> = {
 export default function AdminTickets() {
   const [tickets, setTickets] = useState<Ticket[] | null>(null);
   const [filter, setFilter] = useState('all');
+  const [q, setQ] = useState('');
   const [active, setActive] = useState<Ticket | null>(null);
 
-  const load = () => api.get<{ tickets: Ticket[] }>('/admin/tickets').then((d) => setTickets(d.tickets));
-  useEffect(() => { load(); }, []);
+  const load = () => {
+    const params = new URLSearchParams();
+    if (q) params.set('q', q);
+    return api.get<{ tickets: Ticket[] }>(`/admin/tickets?${params}`).then((d) => setTickets(d.tickets));
+  };
+  useEffect(() => { const t = setTimeout(load, 200); return () => clearTimeout(t); }, [q]);
 
   if (active) return <TicketThread ticket={active} admin onBack={() => { setActive(null); load(); }} />;
 
@@ -27,6 +32,13 @@ export default function AdminTickets() {
       <div className="px-5 pt-3">
         <h1 className="text-[26px] font-extrabold text-navy">Support Inbox</h1>
         <p className="text-sub text-sm">{tickets?.filter((t) => t.status === 'open' || t.status === 'pending').length ?? 0} open / pending</p>
+      </div>
+
+      <div className="px-5 mt-3">
+        <div className="flex items-center gap-2 bg-black/[0.04] rounded-2xl px-4 py-3">
+          <Search size={18} className="text-sub" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by ticket ID, subject or name…" className="flex-1 bg-transparent outline-none text-[15px]" />
+        </div>
       </div>
 
       <div className="flex gap-2 overflow-x-auto no-scrollbar px-5 mt-4">
@@ -45,10 +57,10 @@ export default function AdminTickets() {
               <div className="flex items-center gap-2">
                 <span className={`chip ${STATUS_STYLE[t.status]}`}>{t.status}</span>
                 {t.priority === 'high' && <span className="chip bg-red-100 text-red-600">high</span>}
-                <span className="text-xs text-sub">{t.category}</span>
+                <span className="text-[11px] font-mono text-sub">{t.reference}</span>
               </div>
               <p className="font-bold text-navy mt-1.5 leading-tight truncate">{t.subject}</p>
-              <p className="text-xs text-sub truncate">{t.user?.name} · {t.messages[t.messages.length - 1]?.body}</p>
+              <p className="text-xs text-sub truncate">{t.user?.name}{t.courseTitle ? ` · ${t.courseTitle}` : ''} · {t.messages[t.messages.length - 1]?.body}</p>
             </div>
             <ChevronRight size={20} className="text-sub" />
           </button>

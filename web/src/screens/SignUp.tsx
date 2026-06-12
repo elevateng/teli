@@ -9,7 +9,8 @@ export default function SignUp() {
   const nav = useNavigate();
   const [params] = useSearchParams();
   const { register } = useAuth();
-  const [fullName, setName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -27,7 +28,7 @@ export default function SignUp() {
     setError('');
     if (password !== confirm) return setError('Passwords do not match.');
     setBusy(true);
-    try { const u = await register(fullName, email, password, ref || undefined); sessionStorage.removeItem('teli_ref'); nav(u.role === 'learner' ? '/home' : '/admin', { replace: true }); }
+    try { const u = await register(`${firstName.trim()} ${lastName.trim()}`.trim(), email, password, ref || undefined); sessionStorage.removeItem('teli_ref'); nav(u.role === 'learner' ? '/home' : '/admin', { replace: true }); }
     catch (err: any) { setError(err.message); }
     finally { setBusy(false); }
   };
@@ -56,11 +57,17 @@ export default function SignUp() {
         {error && <div className="mt-4 text-sm bg-red-50 text-red-600 rounded-xl px-4 py-3">{error}</div>}
 
         <div className="mt-6 space-y-5">
-          <Field label="Full Name">
-            <User size={20} className="text-navy/60" />
-            <input className="flex-1 bg-transparent outline-none" placeholder="Enter your full name"
-              value={fullName} onChange={(e) => setName(e.target.value)} required />
-          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="First Name">
+              <User size={20} className="text-navy/60" />
+              <input className="flex-1 min-w-0 bg-transparent outline-none" placeholder="First"
+                value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
+            </Field>
+            <Field label="Last Name">
+              <input className="flex-1 min-w-0 bg-transparent outline-none" placeholder="Last"
+                value={lastName} onChange={(e) => setLastName(e.target.value)} required />
+            </Field>
+          </div>
           <Field label="Email Address">
             <Mail size={20} className="text-navy/60" />
             <input type="email" className="flex-1 bg-transparent outline-none" placeholder="Enter your email address"

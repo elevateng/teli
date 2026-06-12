@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Pencil, Trash2, X, Search, ListTree, Eye, EyeOff, Award, Ticket, Copy, Check, Power } from 'lucide-react';
-import { api, CourseCard, CourseDetail, AccessCode, naira } from '../../api';
-import { StatusBar, CourseThumb, Spinner } from '../../components/ui';
+import { Plus, Pencil, Trash2, X, Search, ListTree, Eye, EyeOff, Award, Ticket, Copy, Check, Power, Image as ImageIcon } from 'lucide-react';
+import { api, CourseCard, CourseDetail, AccessCode, resizeImage, naira } from '../../api';
+import { StatusBar, CourseThumb, Spinner, Avatar } from '../../components/ui';
 
 const ICONS = ['target', 'megaphone', 'handshake', 'plant', 'doc', 'institution', 'shield', 'chart'];
 const COLORS = ['navy', 'violet', 'peach', 'green', 'sand', 'blue'];
@@ -82,11 +82,15 @@ export default function AdminCourses() {
 interface Form {
   title: string; category: string; level: string; duration: string; price: string; oldPrice: string;
   summary: string; description: string; color: string; icon: string; outcomes: string[];
+  image: string | null;
+  instructor: { name: string; title: string; bio: string; avatar: string | null };
+  signatoryName: string;
   published: boolean; visibility: 'public' | 'private'; cert: { minProgress: string; minQuizScore: string; requireQuizzes: boolean };
 }
 const empty: Form = {
   title: '', category: 'Fundraising', level: 'Beginner', duration: '6 weeks', price: '20000', oldPrice: '',
   summary: '', description: '', color: 'navy', icon: 'target', outcomes: [],
+  image: null, instructor: { name: '', title: 'Instructor', bio: '', avatar: null }, signatoryName: '',
   published: true, visibility: 'public', cert: { minProgress: '100', minQuizScore: '0', requireQuizzes: true },
 };
 
@@ -103,6 +107,9 @@ function CourseEditor({ id, onClose, onSaved }: { id: number | 'new'; onClose: (
       price: String(c.price), oldPrice: c.oldPrice ? String(c.oldPrice) : '',
       summary: c.summary, description: c.description, color: c.color, icon: c.icon,
       outcomes: c.outcomes, published: c.published, visibility: c.visibility || 'public',
+      image: c.image || null,
+      instructor: { name: c.instructor.name, title: c.instructor.title, bio: c.instructor.bio, avatar: c.instructor.avatar },
+      signatoryName: c.signatoryName || '',
       cert: { minProgress: String(c.cert.minProgress), minQuizScore: String(c.cert.minQuizScore), requireQuizzes: c.cert.requireQuizzes },
     }));
   }, [id]);
@@ -117,6 +124,7 @@ function CourseEditor({ id, onClose, onSaved }: { id: number | 'new'; onClose: (
         price: Number(f.price), oldPrice: f.oldPrice ? Number(f.oldPrice) : null,
         summary: f.summary, description: f.description || f.summary, color: f.color, icon: f.icon,
         outcomes: f.outcomes.filter(Boolean), published: f.published, visibility: f.visibility,
+        image: f.image, instructor: f.instructor, signatoryName: f.signatoryName,
         cert: { minProgress: Number(f.cert.minProgress), minQuizScore: Number(f.cert.minQuizScore), requireQuizzes: f.cert.requireQuizzes },
       };
       if (id === 'new') await api.post('/admin/courses', payload);
@@ -156,6 +164,38 @@ function CourseEditor({ id, onClose, onSaved }: { id: number | 'new'; onClose: (
               </div>
             ))}
             <button onClick={() => set('outcomes', [...f.outcomes, ''])} className="text-brand font-bold text-sm flex items-center gap-1"><Plus size={15} /> Add outcome</button>
+          </L>
+
+          {/* course image */}
+          <L label="Course image (optional — replaces the icon as the thumbnail)">
+            <div className="flex items-center gap-3">
+              {f.image ? <img src={f.image} className="w-16 h-16 rounded-xl object-cover" /> : <CourseThumb icon={f.icon} color={f.color} size={64} />}
+              <label className="text-brand font-bold text-sm cursor-pointer flex items-center gap-1">
+                <ImageIcon size={15} /> {f.image ? 'Replace' : 'Upload'}
+                <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={async (e) => { const fl = e.target.files?.[0]; if (fl) set('image', await resizeImage(fl, 640)); }} />
+              </label>
+              {f.image && <button onClick={() => set('image', null)} className="text-sub text-sm">Remove</button>}
+            </div>
+          </L>
+
+          {/* instructor */}
+          <div className="card p-4 bg-black/[0.02]">
+            <p className="font-bold text-navy mb-3">Instructor (shown on the course + certificate)</p>
+            <div className="flex items-center gap-3 mb-3">
+              <Avatar name={f.instructor.name || '?'} src={f.instructor.avatar} size={56} />
+              <label className="text-brand font-bold text-sm cursor-pointer flex items-center gap-1">
+                <ImageIcon size={15} /> {f.instructor.avatar ? 'Replace photo' : 'Upload photo'}
+                <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={async (e) => { const fl = e.target.files?.[0]; if (fl) set('instructor', { ...f.instructor, avatar: await resizeImage(fl, 256) }); }} />
+              </label>
+              {f.instructor.avatar && <button onClick={() => set('instructor', { ...f.instructor, avatar: null })} className="text-sub text-sm">Remove</button>}
+            </div>
+            <input className="field mb-2" placeholder="Instructor name" value={f.instructor.name} onChange={(e) => set('instructor', { ...f.instructor, name: e.target.value })} />
+            <input className="field mb-2" placeholder="Title (e.g. Fundraising Lead)" value={f.instructor.title} onChange={(e) => set('instructor', { ...f.instructor, title: e.target.value })} />
+            <textarea className="field h-16" placeholder="Short bio" value={f.instructor.bio} onChange={(e) => set('instructor', { ...f.instructor, bio: e.target.value })} />
+          </div>
+
+          <L label="Certificate signatory name (signed on certificates)">
+            <input className="field" placeholder="e.g. Ayo Okafor, Director" value={f.signatoryName} onChange={(e) => set('signatoryName', e.target.value)} />
           </L>
 
           <L label="Icon">

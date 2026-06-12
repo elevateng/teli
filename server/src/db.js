@@ -268,9 +268,21 @@ CREATE TABLE IF NOT EXISTS access_codes (
   await addColumn('users', 'referral_points', 'referral_points INTEGER NOT NULL DEFAULT 0');
   await addColumn('users', 'referred_by', 'referred_by INTEGER'); // referrer user id
   await addColumn('courses', 'visibility', "visibility TEXT NOT NULL DEFAULT 'public'"); // public | private
+  await addColumn('courses', 'created_by', 'created_by INTEGER'); // owner (admin who created it)
+  await addColumn('courses', 'image', 'image TEXT'); // course photo (data URL)
+  await addColumn('courses', 'instructor_name', 'instructor_name TEXT');
+  await addColumn('courses', 'instructor_title', 'instructor_title TEXT');
+  await addColumn('courses', 'instructor_bio', 'instructor_bio TEXT');
+  await addColumn('courses', 'instructor_avatar', 'instructor_avatar TEXT'); // data URL
+  await addColumn('courses', 'signatory_name', 'signatory_name TEXT'); // name signed on certificates
   // personal (user-owned) coupons, e.g. referral rewards
   await addColumn('coupons', 'user_id', 'user_id INTEGER'); // null = public coupon
   await addColumn('coupons', 'label', 'label TEXT');
+  // reviews tied to a user (one per user per course)
+  await addColumn('reviews', 'user_id', 'user_id INTEGER');
+  // tickets: trackable reference + optional course link
+  await addColumn('tickets', 'reference', 'reference TEXT');
+  await addColumn('tickets', 'course_id', 'course_id INTEGER');
   await addColumn('courses', 'cert_min_progress', 'cert_min_progress INTEGER NOT NULL DEFAULT 100');
   await addColumn('courses', 'cert_min_quiz_score', 'cert_min_quiz_score INTEGER NOT NULL DEFAULT 0');
   await addColumn('courses', 'cert_require_quizzes', 'cert_require_quizzes INTEGER NOT NULL DEFAULT 1');
