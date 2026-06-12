@@ -976,14 +976,16 @@ app.post('/api/checkout/verify', authOptional, authRequired, ah(async (req, res)
 
   if (order.provider === 'flutterwave') {
     try {
-      if (!transactionId) return res.status(400).json({ error: 'Missing transaction id' });
-      const r = await fetch(`https://api.flutterwave.com/v3/transactions/${encodeURIComponent(transactionId)}/verify`, {
-        headers: { Authorization: `Bearer ${config.FLW_SECRET_KEY}` },
-      });
+      // Prefer the transaction id when present; otherwise look it up by our reference
+      // (the redirect doesn't always include transaction_id).
+      const url = transactionId
+        ? `https://api.flutterwave.com/v3/transactions/${encodeURIComponent(transactionId)}/verify`
+        : `https://api.flutterwave.com/v3/transactions/verify_by_reference?tx_ref=${encodeURIComponent(reference)}`;
+      const r = await fetch(url, { headers: { Authorization: `Bearer ${config.FLW_SECRET_KEY}` } });
       const data = await r.json();
       const d = data.data;
       const ok = data.status === 'success' && d?.status === 'successful'
-        && d.tx_ref === reference && (d.currency === 'NGN') && Number(d.amount) >= Number(order.amount);
+        && d.tx_ref === reference && d.currency === 'NGN' && Number(d.amount) >= Number(order.amount);
       if (!ok) return res.status(402).json({ error: 'Payment not completed' });
     } catch {
       return res.status(502).json({ error: 'Could not verify with Flutterwave' });

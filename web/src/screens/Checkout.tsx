@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Tag, ShieldCheck, Lock, CheckCircle2, Loader2, CreditCard } from 'lucide-react';
-import { api, CourseDetail as CD, Quote, naira } from '../api';
+import { api, CourseDetail as CD, Quote, RuntimeConfig, naira } from '../api';
 import { TopBar, CourseThumb, Spinner } from '../components/ui';
+
+const PROVIDER_LABEL: Record<string, string> = { flutterwave: 'Flutterwave', paystack: 'Paystack', sandbox: 'a secure test gateway' };
 
 export default function Checkout() {
   const { slug } = useParams();
@@ -14,8 +16,12 @@ export default function Checkout() {
   const [stage, setStage] = useState<'review' | 'paying'>('review');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [provider, setProvider] = useState('sandbox');
 
-  useEffect(() => { api.get<{ course: CD }>(`/courses/${slug}`).then((d) => setCourse(d.course)); }, [slug]);
+  useEffect(() => {
+    api.get<{ course: CD }>(`/courses/${slug}`).then((d) => setCourse(d.course));
+    api.get<RuntimeConfig>('/config').then((c) => setProvider(c.paymentProvider)).catch(() => {});
+  }, [slug]);
 
   if (!course) return <Spinner />;
   const amount = quote ? quote.amount : course.price;
@@ -60,7 +66,7 @@ export default function Checkout() {
           <Loader2 size={40} className="text-brand animate-spin" />
         </div>
         <h2 className="text-2xl font-extrabold text-navy">Processing payment…</h2>
-        <p className="text-sub mt-2">Securely confirming your {naira(amount)} payment (sandbox).</p>
+        <p className="text-sub mt-2">Securely confirming your {naira(amount)} payment.</p>
       </div>
     );
   }
@@ -109,7 +115,7 @@ export default function Checkout() {
         </div>
 
         <div className="flex items-center gap-2 text-xs text-sub mt-4">
-          <Lock size={14} /> Payments are processed securely by Paystack. 7-day money-back guarantee.
+          <Lock size={14} /> Payments are processed securely by {PROVIDER_LABEL[provider] || 'our payment partner'}. 7-day money-back guarantee.
         </div>
       </div>
 
