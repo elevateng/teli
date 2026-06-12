@@ -32,6 +32,22 @@ export const api = {
   del: <T,>(p: string) => request<T>(p, { method: 'DELETE' }),
 };
 
+// Resize an image File to a small square-ish JPEG data URL (for avatars).
+export async function resizeImage(file: File, max = 256): Promise<string> {
+  const dataUrl: string = await new Promise((res, rej) => {
+    const r = new FileReader(); r.onload = () => res(r.result as string); r.onerror = rej; r.readAsDataURL(file);
+  });
+  const img = await new Promise<HTMLImageElement>((res, rej) => {
+    const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = dataUrl;
+  });
+  const scale = Math.min(1, max / Math.max(img.width, img.height));
+  const w = Math.max(1, Math.round(img.width * scale));
+  const h = Math.max(1, Math.round(img.height * scale));
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  c.getContext('2d')!.drawImage(img, 0, 0, w, h);
+  return c.toDataURL('image/jpeg', 0.85);
+}
+
 // read a File as a data URL and upload it; returns the served path
 export async function uploadFile(file: File): Promise<string> {
   const dataUrl: string = await new Promise((resolve, reject) => {
@@ -46,7 +62,11 @@ export async function uploadFile(file: File): Promise<string> {
 
 // ---------------- types ----------------
 export type Role = 'learner' | 'admin' | 'super_admin';
-export interface User { id: number; fullName: string; email: string; tagline: string; role: Role; points: number; streakDays: number; }
+export interface User {
+  id: number; fullName: string; email: string; tagline: string; role: Role;
+  points: number; streakDays: number; avatar?: string | null; mustChangePassword?: boolean;
+}
+export interface AccessCode { id: number; code: string; email: string | null; maxUses: number; usedCount: number; active: boolean; createdAt: string; }
 
 export interface AdminStats {
   learners: number; admins: number; courses: number; enrollments: number;
@@ -64,6 +84,7 @@ export interface CourseCard {
   summary: string; price: number; oldPrice: number | null; discount: string | null;
   rating: number; reviewsCount: number; color: string; icon: string;
   progress: number; enrolled: boolean; saved: boolean;
+  visibility?: 'public' | 'private'; published?: boolean;
 }
 
 export type LessonKind = 'reading' | 'video' | 'activity' | 'quiz';
@@ -83,7 +104,7 @@ export interface CourseDetail extends Omit<CourseCard, 'progress'> {
   moduleCount: number; lessonCount: number; estimatedTime: string;
   modules: ModuleNode[]; reviews: Review[];
   lastAccessed: string | null; progress: number; completedLessons: number; totalLessons: number;
-  published: boolean; cert: CertConditions;
+  published: boolean; visibility: 'public' | 'private'; cert: CertConditions;
 }
 
 export interface LearningCard {

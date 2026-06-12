@@ -245,12 +245,27 @@ CREATE TABLE IF NOT EXISTS referrals (
   code        TEXT NOT NULL UNIQUE,
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS access_codes (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  code        TEXT NOT NULL UNIQUE,
+  course_id   INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  email       TEXT,                       -- optional: lock a code to one email
+  max_uses    INTEGER NOT NULL DEFAULT 1,
+  used_count  INTEGER NOT NULL DEFAULT 0,
+  active      INTEGER NOT NULL DEFAULT 1,
+  created_by  INTEGER REFERENCES users(id),
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
 `);
 
   // migrations for pre-existing databases
   await addColumn('users', 'google_id', 'google_id TEXT');
   await addColumn('users', 'active', 'active INTEGER NOT NULL DEFAULT 1');
   await addColumn('users', 'created_by', 'created_by INTEGER');
+  await addColumn('users', 'avatar', 'avatar TEXT');
+  await addColumn('users', 'must_change_password', 'must_change_password INTEGER NOT NULL DEFAULT 0');
+  await addColumn('courses', 'visibility', "visibility TEXT NOT NULL DEFAULT 'public'"); // public | private
   await addColumn('courses', 'cert_min_progress', 'cert_min_progress INTEGER NOT NULL DEFAULT 100');
   await addColumn('courses', 'cert_min_quiz_score', 'cert_min_quiz_score INTEGER NOT NULL DEFAULT 0');
   await addColumn('courses', 'cert_require_quizzes', 'cert_require_quizzes INTEGER NOT NULL DEFAULT 1');

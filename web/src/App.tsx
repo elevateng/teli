@@ -21,6 +21,8 @@ import Support from './screens/Support';
 import Settings from './screens/Settings';
 import Notifications from './screens/Notifications';
 import ResetPassword from './screens/ResetPassword';
+import SetPassword from './screens/SetPassword';
+import Redeem from './screens/Redeem';
 
 import Splash from './screens/Splash';
 import SignUp from './screens/SignUp';
@@ -38,11 +40,14 @@ import CourseComplete from './screens/CourseComplete';
 import Achievements from './screens/Achievements';
 import Certificate from './screens/Certificate';
 
+// Responsive shell: full-screen on phones (with safe-area insets), and a clean
+// centered app panel on larger screens / desktop web.
 function Phone({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-[100dvh] w-full flex items-stretch md:items-center justify-center bg-[#e9ecf3] md:py-6">
-      <div className="relative w-full max-w-[440px] bg-white flex flex-col overflow-hidden
-                      h-[100dvh] md:h-[900px] md:rounded-[44px] md:shadow-2xl md:ring-1 md:ring-black/10">
+    <div className="min-h-[100dvh] w-full flex justify-center bg-navy-50/60 md:py-6">
+      <div className="relative w-full md:max-w-[480px] bg-white flex flex-col overflow-hidden
+                      min-h-[100dvh] md:min-h-0 md:h-[calc(100dvh-3rem)]
+                      md:rounded-[28px] md:shadow-xl md:ring-1 md:ring-black/[0.06]">
         {children}
       </div>
     </div>
@@ -54,6 +59,8 @@ function RequireAuth({ children, roles }: { children: ReactNode; roles?: Role[] 
   const loc = useLocation();
   if (loading) return <Phone><Spinner /></Phone>;
   if (!user) return <Navigate to="/" replace state={{ from: loc.pathname }} />;
+  // Invited users must set their own password before doing anything else.
+  if (user.mustChangePassword && loc.pathname !== '/set-password') return <Navigate to="/set-password" replace />;
   if (roles && !roles.includes(user.role)) return <Navigate to={homeForRole(user)} replace />;
   return <>{children}</>;
 }
@@ -132,6 +139,8 @@ export default function App() {
 
       {/* full-screen protected */}
       <Route element={<FullLayout />}>
+        <Route path="/set-password" element={<SetPassword />} />
+        <Route path="/redeem" element={<Redeem />} />
         <Route path="/course/:slug/checkout" element={<Checkout />} />
         <Route path="/checkout/callback" element={<CheckoutCallback />} />
         <Route path="/support" element={<Support />} />

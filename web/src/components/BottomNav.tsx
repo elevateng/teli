@@ -10,7 +10,7 @@ const items = [
 
 export default function BottomNav() {
   return (
-    <nav className="shrink-0 bg-white border-t border-black/[0.06] px-2 pb-5 pt-2">
+    <nav className="shrink-0 bg-white border-t border-black/[0.06] px-2 pt-2" style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0.75rem)' }}>
       <div className="flex items-center justify-around">
         {items.map(({ to, label, icon: Icon }) => (
           <NavLink key={to} to={to}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Menu, Search, SlidersHorizontal, Clock, SignalHigh, Bookmark, X, Check } from 'lucide-react';
+import { Menu, Search, SlidersHorizontal, Clock, SignalHigh, Bookmark, X, Check, Ticket, ChevronRight } from 'lucide-react';
 import { api, CourseCard, naira } from '../api';
 import { StatusBar, Wordmark, CourseThumb, Spinner } from '../components/ui';
 import Bell from '../components/Bell';
@@ -71,6 +71,15 @@ export default function Explore() {
           </button>
         ))}
       </div>
+
+      <button onClick={() => nav('/redeem')} className="mx-5 mt-4 w-[calc(100%-2.5rem)] flex items-center gap-3 rounded-2xl bg-brand-50 px-4 py-3 text-left">
+        <Ticket size={20} className="text-brand shrink-0" />
+        <div className="flex-1">
+          <p className="font-bold text-navy text-sm leading-tight">Have an access code?</p>
+          <p className="text-xs text-sub">Unlock a private course you were invited to.</p>
+        </div>
+        <ChevronRight size={18} className="text-sub" />
+      </button>
 
       <div className="flex items-center justify-between px-5 mt-5">
         <h2 className="text-[19px] font-extrabold text-navy">{active}</h2>

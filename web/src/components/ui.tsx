@@ -2,7 +2,7 @@ import { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Target, Megaphone, Handshake, Sprout, FileText, Landmark, Shield, BarChart3,
-  Heart, Users, GraduationCap, Star, Crosshair, ChevronLeft, Wifi, BatteryFull, SignalHigh,
+  Heart, Users, GraduationCap, Star, Crosshair, ChevronLeft,
 } from 'lucide-react';
 
 // ---------- course icon + color theming ----------
@@ -35,19 +35,24 @@ export function PointIcon({ name, className, size = 22 }: { name: string; classN
   return <Ico className={className} size={size} strokeWidth={2.2} />;
 }
 
-// ---------- phone status bar ----------
-export function StatusBar({ dark = false }: { dark?: boolean }) {
-  const c = dark ? 'text-white' : 'text-navy';
+// ---------- user avatar (photo or initial) ----------
+export function Avatar({ name, src, size = 44, className = '' }: { name?: string; src?: string | null; size?: number; className?: string }) {
+  const initial = (name || '?').trim().charAt(0).toUpperCase();
+  if (src) {
+    return <img src={src} alt={name || 'avatar'} className={`rounded-full object-cover shrink-0 ${className}`} style={{ width: size, height: size }} />;
+  }
   return (
-    <div className={`flex items-center justify-between px-6 pt-3 pb-1 text-[15px] font-semibold ${c}`}>
-      <span>9:41</span>
-      <div className="flex items-center gap-1.5">
-        <SignalHigh size={17} />
-        <Wifi size={17} />
-        <BatteryFull size={20} />
-      </div>
+    <div className={`rounded-full bg-violet-100 text-violet-600 flex items-center justify-center font-extrabold shrink-0 ${className}`}
+      style={{ width: size, height: size, fontSize: size * 0.42 }}>
+      {initial}
     </div>
   );
+}
+
+// Real apps have no fake status bar. This just reserves the device's safe area
+// (the notch / camera cutout) so content never sits underneath it.
+export function StatusBar(_props: { dark?: boolean } = {}) {
+  return <div className="shrink-0" style={{ height: 'max(env(safe-area-inset-top), 0.5rem)' }} />;
 }
 
 // ---------- screen header ----------
@@ -81,11 +86,13 @@ export function Wordmark({ withTagline = false, className = '' }: { withTagline?
 }
 
 export function BookMark({ size = 32 }: { size?: number }) {
+  // TELI open-book mark: navy left page, orange right page, with a navy swoosh.
   return (
-    <svg width={size} height={size} viewBox="0 0 64 64" className="shrink-0">
-      <path d="M32 16c-5-3.2-11-3.6-16-1.6v30c5-2 11-1.6 16 1.6V16z" fill="#0F2147" />
-      <path d="M32 16c5-3.2 11-3.6 16-1.6v30c-5-2-11-1.6-16 1.6V16z" fill="#F26419" />
-      <path d="M32 16v30" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" />
+    <svg width={size} height={size} viewBox="0 0 100 100" className="shrink-0" aria-label="TELI">
+      <path d="M50 24 C 37 15.5, 20 15.5, 7 19.5 L 7 73 C 20 69, 37 69, 50 77.5 Z" fill="#10254a" />
+      <path d="M50 24 C 63 15.5, 80 15.5, 93 19.5 L 93 73 C 80 69, 63 69, 50 77.5 Z" fill="#F26419" />
+      <path d="M50 70 C 63 61.5, 80 61.5, 93 65.5 L 93 73 C 80 69, 63 69, 50 77.5 Z" fill="#10254a" />
+      <rect x="48.4" y="22" width="3.2" height="56" rx="1.6" fill="#fff" />
     </svg>
   );
 }

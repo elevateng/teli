@@ -41,7 +41,11 @@ const sign = (user) => jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '30d' 
 
 function publicUser(u) {
   if (!u) return null;
-  return { id: u.id, fullName: u.full_name, email: u.email, tagline: u.tagline, role: u.role || 'learner', points: u.points, streakDays: u.streak_days };
+  return {
+    id: u.id, fullName: u.full_name, email: u.email, tagline: u.tagline,
+    role: u.role || 'learner', points: u.points, streakDays: u.streak_days,
+    avatar: u.avatar || null, mustChangePassword: !!u.must_change_password,
+  };
 }
 
 const authOptional = ah(async (req, _res, next) => {
@@ -139,6 +143,7 @@ async function getCourseDetail(slugOrId, userId) {
     lastAccessed: enrollment?.last_accessed || null,
     progress, completedLessons, totalLessons,
     published: course.published !== 0,
+    visibility: course.visibility || 'public',
     cert: {
       minProgress: course.cert_min_progress ?? 100,
       minQuizScore: course.cert_min_quiz_score ?? 0,
@@ -255,20 +260,16 @@ app.get('/api/config', (_req, res) => {
 // Google sign-in. With a real GOOGLE_CLIENT_ID we verify the ID token via Google's
 // tokeninfo endpoint; otherwise we accept a dev payload so the button works locally.
 app.post('/api/auth/google', ah(async (req, res) => {
-  let email, name, sub;
-  const { credential, devEmail, devName } = req.body || {};
-  if (googleEnabled && credential) {
-    const r = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`);
-    if (!r.ok) return res.status(401).json({ error: 'Google verification failed' });
-    const p = await r.json();
-    if (p.aud !== config.GOOGLE_CLIENT_ID) return res.status(401).json({ error: 'Token audience mismatch' });
-    email = (p.email || '').toLowerCase(); name = p.name || email; sub = p.sub;
-  } else if (!googleEnabled) {
-    email = String(devEmail || 'google.user@teli.africa').toLowerCase();
-    name = devName || 'Google User'; sub = 'dev-' + email;
-  } else {
-    return res.status(400).json({ error: 'Missing Google credential' });
-  }
+  if (!googleEnabled) return res.status(400).json({ error: 'Google sign-in is not enabled' });
+  const { credential } = req.body || {};
+  if (!credential) return res.status(400).json({ error: 'Missing Google credential' });
+  const r = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`);
+  if (!r.ok) return res.status(401).json({ error: 'Google verification failed' });
+  const p = await r.json();
+  if (p.aud !== config.GOOGLE_CLIENT_ID) return res.status(401).json({ error: 'Token audience mismatch' });
+  const email = (p.email || '').toLowerCase();
+  const name = p.name || email;
+  const sub = p.sub;
   let user = await db.prepare('SELECT * FROM users WHERE email = ? OR google_id = ?').get(email, sub);
   if (!user) {
     const info = await db.prepare('INSERT INTO users (full_name,email,password,google_id) VALUES (?,?,?,?)')
@@ -309,11 +310,27 @@ app.post('/api/auth/reset', ah(async (req, res) => {
 app.post('/api/auth/change-password', authOptional, authRequired, ah(async (req, res) => {
   const { currentPassword, newPassword } = req.body || {};
   if (!newPassword || String(newPassword).length < 8) return res.status(400).json({ error: 'New password must be at least 8 characters' });
-  if (req.user.password && !bcrypt.compareSync(String(currentPassword || ''), req.user.password)) {
+  // First-login (invited) users set a new password without re-entering the temp one.
+  if (!req.user.must_change_password && req.user.password && !bcrypt.compareSync(String(currentPassword || ''), req.user.password)) {
     return res.status(400).json({ error: 'Current password is incorrect' });
   }
-  await db.prepare('UPDATE users SET password = ? WHERE id = ?').run(bcrypt.hashSync(String(newPassword), 10), req.user.id);
+  await db.prepare('UPDATE users SET password = ?, must_change_password = 0 WHERE id = ?').run(bcrypt.hashSync(String(newPassword), 10), req.user.id);
   res.json({ ok: true });
+}));
+
+// upload / remove own avatar (stored in the DB so it persists across deploys)
+app.post('/api/auth/avatar', authOptional, authRequired, ah(async (req, res) => {
+  const { dataUrl } = req.body || {};
+  if (!dataUrl) {
+    await db.prepare('UPDATE users SET avatar = NULL WHERE id = ?').run(req.user.id);
+  } else {
+    const m = String(dataUrl).match(/^data:image\/(png|jpe?g|webp);base64,(.+)$/);
+    if (!m) return res.status(400).json({ error: 'Please choose a PNG, JPG or WebP image' });
+    if (Buffer.from(m[2], 'base64').length > 900 * 1024) return res.status(413).json({ error: 'Image is too large' });
+    await db.prepare('UPDATE users SET avatar = ? WHERE id = ?').run(dataUrl, req.user.id);
+  }
+  const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+  res.json({ user: publicUser(user) });
 }));
 
 // update own profile (name, tagline)
@@ -337,8 +354,11 @@ app.get('/api/categories', ah(async (_req, res) => {
 
 app.get('/api/courses', authOptional, ah(async (req, res) => {
   const { category, q, sort } = req.query;
+  const isStaff = req.user && req.user.role !== 'learner';
   let sql = 'SELECT * FROM courses';
   const where = [], params = [];
+  // Learners only see public, published courses; admins see everything (to manage).
+  if (!isStaff) where.push("visibility = 'public' AND published = 1");
   if (category && category !== 'All Courses') { where.push('category = ?'); params.push(category); }
   if (q) { where.push('(title LIKE ? OR summary LIKE ? OR category LIKE ?)'); const like = `%${q}%`; params.push(like, like, like); }
   if (where.length) sql += ' WHERE ' + where.join(' AND ');
@@ -351,7 +371,7 @@ app.get('/api/courses', authOptional, ah(async (req, res) => {
     courses.push({
       id: c.id, slug: c.slug, title: c.title, category: c.category, level: c.level, duration: c.duration,
       summary: c.summary, price: c.price, oldPrice: c.old_price, discount: c.discount, rating: c.rating,
-      reviewsCount: c.reviews_count, color: c.color, icon: c.icon,
+      reviewsCount: c.reviews_count, color: c.color, icon: c.icon, visibility: c.visibility, published: c.published !== 0,
       progress: prog?.percent ?? 0, enrolled: !!enr?.enrolled, saved: !!enr?.saved,
     });
   }
@@ -361,6 +381,11 @@ app.get('/api/courses', authOptional, ah(async (req, res) => {
 app.get('/api/courses/:slug', authOptional, ah(async (req, res) => {
   const detail = await getCourseDetail(req.params.slug, req.user?.id);
   if (!detail) return res.status(404).json({ error: 'Course not found' });
+  // hide private courses from people who aren't enrolled (staff can always view)
+  const isStaff = req.user && req.user.role !== 'learner';
+  if (detail.visibility === 'private' && !detail.enrolled && !isStaff) {
+    return res.status(404).json({ error: 'Course not found' });
+  }
   res.json({ course: detail });
 }));
 
@@ -577,6 +602,9 @@ app.post('/api/admin/courses', authOptional, requireRole('admin', 'super_admin')
     await db.prepare('UPDATE courses SET cert_min_progress=?, cert_min_quiz_score=?, cert_require_quizzes=? WHERE id=?')
       .run(Number(b.cert.minProgress) || 100, Number(b.cert.minQuizScore) || 0, b.cert.requireQuizzes === false ? 0 : 1, info.lastInsertRowid);
   }
+  if (b.visibility === 'private' || b.visibility === 'public') {
+    await db.prepare('UPDATE courses SET visibility=? WHERE id=?').run(b.visibility, info.lastInsertRowid);
+  }
   await audit(req.user, 'course.create', b.title, 'course', info.lastInsertRowid);
   res.json({ course: await getCourseDetail(info.lastInsertRowid, null) });
 }));
@@ -589,6 +617,7 @@ app.put('/api/admin/courses/:id', authOptional, requireRole('admin', 'super_admi
     UPDATE courses SET title=@title, category=@category, level=@level, duration=@duration,
       summary=@summary, description=@description, price=@price, old_price=@old_price,
       discount=@discount, color=@color, icon=@icon, outcomes=@outcomes, published=@published,
+      visibility=@visibility,
       cert_min_progress=@cmp, cert_min_quiz_score=@cmq, cert_require_quizzes=@crq WHERE id=@id
   `).run({
     id: course.id,
@@ -600,6 +629,7 @@ app.put('/api/admin/courses/:id', authOptional, requireRole('admin', 'super_admi
     discount: b.discount ?? course.discount, color: b.color ?? course.color, icon: b.icon ?? course.icon,
     outcomes: b.outcomes != null ? JSON.stringify(b.outcomes) : course.outcomes,
     published: b.published != null ? (b.published ? 1 : 0) : course.published,
+    visibility: (b.visibility === 'private' || b.visibility === 'public') ? b.visibility : (course.visibility || 'public'),
     cmp: b.cert ? Number(b.cert.minProgress) || 0 : course.cert_min_progress,
     cmq: b.cert ? Number(b.cert.minQuizScore) || 0 : course.cert_min_quiz_score,
     crq: b.cert ? (b.cert.requireQuizzes === false ? 0 : 1) : course.cert_require_quizzes,
@@ -710,10 +740,20 @@ app.post('/api/admin/upload', authOptional, requireRole('admin', 'super_admin'),
 }));
 
 // ----------------------- user management -----------------------
+// generate a friendly temporary password
+function genPassword() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+  let p = '';
+  for (let i = 0; i < 10; i++) p += chars[crypto.randomInt(chars.length)];
+  return p + '!' + crypto.randomInt(10, 99);
+}
+
+// Invite a user: creates the account with an auto-generated password, emails it,
+// and flags the account so they must set a new password on first login.
 app.post('/api/admin/users', authOptional, requireRole('admin', 'super_admin'), ah(async (req, res) => {
-  const { fullName, email, password, role = 'learner' } = req.body || {};
-  if (!fullName || !email || !password) return res.status(400).json({ error: 'Name, email and password are required' });
-  if (String(password).length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  const { fullName, email, role = 'learner' } = req.body || {};
+  if (!fullName || !email) return res.status(400).json({ error: 'Name and email are required' });
+  if (!/.+@.+\..+/.test(email)) return res.status(400).json({ error: 'Enter a valid email address' });
   if (!['learner', 'admin', 'super_admin'].includes(role)) return res.status(400).json({ error: 'Invalid role' });
   if (role !== 'learner' && req.user.role !== 'super_admin') {
     return res.status(403).json({ error: 'Only a Super Admin can create admin accounts' });
@@ -721,13 +761,15 @@ app.post('/api/admin/users', authOptional, requireRole('admin', 'super_admin'), 
   if (await db.prepare('SELECT id FROM users WHERE email = ?').get(String(email).toLowerCase())) {
     return res.status(409).json({ error: 'An account with this email already exists' });
   }
-  const info = await db.prepare('INSERT INTO users (full_name,email,password,role,created_by) VALUES (?,?,?,?,?)')
-    .run(fullName, String(email).toLowerCase(), bcrypt.hashSync(String(password), 10), role, req.user.id);
-  await audit(req.user, 'user.create', `${email} (${role})`, 'user', info.lastInsertRowid);
-  await notify(info.lastInsertRowid, 'system', 'Welcome to TELI 👋', 'Your account has been created. Start exploring courses.', '/explore');
-  sendMail({ to: String(email).toLowerCase(), subject: 'Your TELI account is ready', title: 'Welcome to TELI 👋',
-    html: `<p>Hi ${fullName.split(' ')[0]},</p><p>An account has been created for you on TELI as a <b>${role.replace('_', ' ')}</b>.</p><p><b>Email:</b> ${email}<br/><b>Temporary password:</b> ${password}</p><p>Please log in and change your password.</p><p><a href="${config.APP_URL}/login" style="background:#F26419;color:#fff;padding:12px 20px;border-radius:10px;text-decoration:none;display:inline-block">Log in</a></p>` });
-  res.json({ user: publicUser(await db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid)) });
+  const tempPassword = genPassword();
+  const info = await db.prepare('INSERT INTO users (full_name,email,password,role,created_by,must_change_password) VALUES (?,?,?,?,?,1)')
+    .run(fullName, String(email).toLowerCase(), bcrypt.hashSync(tempPassword, 10), role, req.user.id);
+  await audit(req.user, 'user.invite', `${email} (${role})`, 'user', info.lastInsertRowid);
+  await notify(info.lastInsertRowid, 'system', 'Welcome to TELI 👋', 'Your account is ready. Start exploring courses.', '/explore');
+  sendMail({ to: String(email).toLowerCase(), subject: 'You’ve been invited to TELI', title: 'Welcome to TELI 👋',
+    html: `<p>Hi ${fullName.split(' ')[0]},</p><p>An account has been created for you on TELI as a <b>${role.replace('_', ' ')}</b>.</p><p><b>Email:</b> ${email}<br/><b>Temporary password:</b> <code style="background:#f3f4f6;padding:2px 6px;border-radius:4px">${tempPassword}</code></p><p>You’ll be asked to set your own password the first time you log in.</p><p><a href="${config.APP_URL}/login" style="background:#F26419;color:#fff;padding:12px 20px;border-radius:10px;text-decoration:none;display:inline-block">Log in</a></p>` });
+  // Return the temp password so the admin can share it manually if email isn't configured yet.
+  res.json({ user: publicUser(await db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid)), tempPassword: emailEnabled ? undefined : tempPassword, emailed: emailEnabled });
 }));
 
 app.post('/api/admin/users/:id/active', authOptional, requireRole('admin', 'super_admin'), ah(async (req, res) => {
@@ -845,6 +887,72 @@ app.get('/api/admin/audit', authOptional, requireRole('admin', 'super_admin'), a
   res.json({ events: rows.map((e) => ({ id: e.id, actor: e.actor_name, action: e.action, detail: e.detail, targetType: e.target_type, at: e.created_at })) });
 }));
 
+// ----------------------- access codes (private courses) -----------------------
+function accessCodeView(c) {
+  return { id: c.id, code: c.code, email: c.email, maxUses: c.max_uses, usedCount: c.used_count, active: !!c.active, courseTitle: c.course_title, createdAt: c.created_at };
+}
+
+app.get('/api/admin/courses/:id/access-codes', authOptional, requireRole('admin', 'super_admin'), ah(async (req, res) => {
+  const course = await db.prepare('SELECT * FROM courses WHERE id = ? OR slug = ?').get(req.params.id, req.params.id);
+  if (!course) return res.status(404).json({ error: 'Course not found' });
+  const rows = await db.prepare('SELECT * FROM access_codes WHERE course_id = ? ORDER BY id DESC').all(course.id);
+  res.json({ codes: rows.map(accessCodeView) });
+}));
+
+// generate access codes; if emails are given, one personalised code each (and email it)
+app.post('/api/admin/courses/:id/access-codes', authOptional, requireRole('admin', 'super_admin'), ah(async (req, res) => {
+  const course = await db.prepare('SELECT * FROM courses WHERE id = ? OR slug = ?').get(req.params.id, req.params.id);
+  if (!course) return res.status(404).json({ error: 'Course not found' });
+  const emails = String(req.body?.emails || '').split(/[,\s]+/).map((e) => e.trim().toLowerCase()).filter((e) => /.+@.+\..+/.test(e));
+  const count = emails.length ? emails.length : Math.min(50, Math.max(1, Number(req.body?.count) || 1));
+  const maxUses = emails.length ? 1 : Math.max(1, Number(req.body?.maxUses) || 1);
+  const created = [];
+  for (let i = 0; i < count; i++) {
+    const email = emails[i] || null;
+    let code;
+    do { code = 'TELI-' + crypto.randomBytes(3).toString('hex').toUpperCase(); }
+    while (await db.prepare('SELECT 1 FROM access_codes WHERE code = ?').get(code));
+    await db.prepare('INSERT INTO access_codes (code,course_id,email,max_uses,created_by) VALUES (?,?,?,?,?)')
+      .run(code, course.id, email, maxUses, req.user.id);
+    created.push({ code, email });
+    if (email) {
+      sendMail({ to: email, subject: `You're invited to “${course.title}” on TELI`, title: 'You’ve got course access 🎟️',
+        html: `<p>You’ve been given access to <b>${course.title}</b> on TELI.</p><p>Your access code: <code style="background:#f3f4f6;padding:2px 8px;border-radius:4px;font-size:16px">${code}</code></p><p>Log in (or create a free account), then go to <b>Explore → Have an access code?</b> and enter it to join the course.</p><p><a href="${config.APP_URL}/redeem?code=${code}" style="background:#F26419;color:#fff;padding:12px 20px;border-radius:10px;text-decoration:none;display:inline-block">Join the course</a></p>` });
+    }
+  }
+  await audit(req.user, 'access_code.create', `${created.length} for ${course.title}`, 'course', course.id);
+  res.json({ created, emailed: emails.length > 0 && emailEnabled });
+}));
+
+app.post('/api/admin/access-codes/:id/toggle', authOptional, requireRole('admin', 'super_admin'), ah(async (req, res) => {
+  const c = await db.prepare('SELECT * FROM access_codes WHERE id = ?').get(req.params.id);
+  if (!c) return res.status(404).json({ error: 'Code not found' });
+  await db.prepare('UPDATE access_codes SET active = ? WHERE id = ?').run(c.active ? 0 : 1, c.id);
+  res.json({ active: !c.active });
+}));
+
+// learner: redeem an access code to join a private course (free)
+app.post('/api/access-codes/redeem', authOptional, authRequired, ah(async (req, res) => {
+  const code = String(req.body?.code || '').trim().toUpperCase();
+  if (!code) return res.status(400).json({ error: 'Enter an access code' });
+  const ac = await db.prepare('SELECT * FROM access_codes WHERE code = ?').get(code);
+  if (!ac || !ac.active) return res.status(400).json({ error: 'Invalid or inactive access code' });
+  if (ac.used_count >= ac.max_uses) return res.status(400).json({ error: 'This access code has already been used' });
+  if (ac.email && ac.email.toLowerCase() !== req.user.email.toLowerCase()) {
+    return res.status(403).json({ error: 'This access code was issued to a different email address' });
+  }
+  const course = await db.prepare('SELECT * FROM courses WHERE id = ?').get(ac.course_id);
+  if (!course) return res.status(404).json({ error: 'Course not found' });
+  const already = await db.prepare('SELECT enrolled FROM enrollments WHERE user_id = ? AND course_id = ?').get(req.user.id, course.id);
+  if (!already?.enrolled) {
+    await db.prepare(`INSERT INTO enrollments (user_id,course_id,enrolled,last_accessed) VALUES (?,?,1,datetime('now'))
+                ON CONFLICT(user_id,course_id) DO UPDATE SET enrolled = 1, last_accessed = datetime('now')`).run(req.user.id, course.id);
+    await db.prepare('UPDATE access_codes SET used_count = used_count + 1 WHERE id = ?').run(ac.id);
+    await notify(req.user.id, 'success', 'Course unlocked 🎟️', `You now have access to “${course.title}”.`, `/course/${course.slug}`);
+  }
+  res.json({ slug: course.slug, course: await getCourseDetail(course.id, req.user.id) });
+}));
+
 // ===================================================================
 //                         PRICING / COUPONS / CHECKOUT
 // ===================================================================
@@ -876,6 +984,7 @@ app.post('/api/checkout/quote', authOptional, authRequired, ah(async (req, res) 
 app.post('/api/checkout/init', authOptional, authRequired, ah(async (req, res) => {
   const course = await db.prepare('SELECT * FROM courses WHERE id = ? OR slug = ?').get(req.body?.courseId, req.body?.courseId);
   if (!course) return res.status(404).json({ error: 'Course not found' });
+  if (course.visibility === 'private') return res.status(403).json({ error: 'This course is by invitation only — enter your access code to join.' });
   if (await db.prepare('SELECT 1 FROM enrollments WHERE user_id = ? AND course_id = ? AND enrolled = 1').get(req.user.id, course.id)) {
     return res.status(400).json({ error: 'You are already enrolled in this course' });
   }

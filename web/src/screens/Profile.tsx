@@ -5,7 +5,7 @@ import {
   Award, Users, Upload, LogOut, LifeBuoy, X, Copy, Send,
 } from 'lucide-react';
 import { api, Achievement, Certificate, Dashboard, shareOrCopy } from '../api';
-import { StatusBar, ProgressBar, PointIcon, Spinner } from '../components/ui';
+import { StatusBar, ProgressBar, PointIcon, Spinner, Avatar } from '../components/ui';
 import { useAuth } from '../auth';
 
 const ACH_STYLE: Record<string, { bg: string; fg: string }> = {
@@ -37,7 +37,7 @@ export default function Profile() {
     <div className="pb-6">
       <StatusBar />
       <div className="flex items-center gap-4 px-5 pt-3">
-        <div className="w-14 h-14 rounded-full bg-violet-100 text-violet-600 flex items-center justify-center text-2xl font-extrabold">{initial}</div>
+        <Avatar name={user.fullName} src={user.avatar} size={56} />
         <div className="flex-1">
           <h1 className="text-[22px] font-extrabold text-navy leading-tight">{user.fullName}</h1>
           <p className="text-sub text-sm">{user.tagline} ☀️</p>

@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Lock, Save, CheckCircle2, LogOut } from 'lucide-react';
-import { api, User as TUser } from '../api';
-import { TopBar } from '../components/ui';
+import { User, Lock, Save, CheckCircle2, LogOut, Camera, Trash2 } from 'lucide-react';
+import { api, User as TUser, resizeImage } from '../api';
+import { TopBar, Avatar } from '../components/ui';
 import { useAuth } from '../auth';
 
 export default function Settings() {
@@ -11,6 +11,24 @@ export default function Settings() {
   const [fullName, setFullName] = useState(user?.fullName || '');
   const [tagline, setTagline] = useState(user?.tagline || '');
   const [savedMsg, setSavedMsg] = useState('');
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const onPickAvatar = async (file?: File) => {
+    if (!file) return;
+    setAvatarBusy(true);
+    try {
+      const dataUrl = await resizeImage(file, 256);
+      const { user } = await api.post<{ user: TUser }>('/auth/avatar', { dataUrl });
+      setUser(user);
+    } catch (e: any) { setSavedMsg(e.message || 'Could not update photo'); }
+    finally { setAvatarBusy(false); }
+  };
+  const removeAvatar = async () => {
+    setAvatarBusy(true);
+    try { const { user } = await api.post<{ user: TUser }>('/auth/avatar', {}); setUser(user); }
+    finally { setAvatarBusy(false); }
+  };
 
   const [cur, setCur] = useState('');
   const [next, setNext] = useState('');
@@ -35,6 +53,20 @@ export default function Settings() {
       <div className="px-5 py-5 space-y-6">
         <div className="card p-5">
           <h2 className="font-extrabold text-navy flex items-center gap-2 mb-4"><User size={18} /> Profile</h2>
+          <div className="flex items-center gap-4 mb-5">
+            <div className="relative">
+              <Avatar name={user?.fullName} src={user?.avatar} size={72} />
+              <button onClick={() => fileRef.current?.click()} className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-brand text-white flex items-center justify-center ring-2 ring-white">
+                <Camera size={14} />
+              </button>
+              <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden"
+                onChange={(e) => onPickAvatar(e.target.files?.[0])} />
+            </div>
+            <div>
+              <button onClick={() => fileRef.current?.click()} disabled={avatarBusy} className="text-brand font-bold text-sm">{avatarBusy ? 'Updating…' : 'Change photo'}</button>
+              {user?.avatar && <button onClick={removeAvatar} className="text-sub text-sm flex items-center gap-1 mt-1"><Trash2 size={13} /> Remove</button>}
+            </div>
+          </div>
           <label className="block mb-3"><span className="text-sm font-bold text-navy">Full Name</span>
             <input className="field mt-1.5" value={fullName} onChange={(e) => setFullName(e.target.value)} /></label>
           <label className="block"><span className="text-sm font-bold text-navy">Tagline</span>

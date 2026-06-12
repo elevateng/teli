@@ -75,9 +75,6 @@ export default function SignUp() {
           {busy ? 'Creating…' : 'Create Account'} <ArrowRight size={20} />
         </button>
 
-        <div className="flex items-center gap-3 my-5 text-sub text-sm">
-          <div className="h-px flex-1 bg-black/10" /> or <div className="h-px flex-1 bg-black/10" />
-        </div>
         <GoogleButton />
 
         <p className="text-center text-sub mt-5">

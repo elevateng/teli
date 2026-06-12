@@ -9,8 +9,8 @@ import GoogleButton from '../components/GoogleButton';
 export default function Login() {
   const nav = useNavigate();
   const { login } = useAuth();
-  const [email, setEmail] = useState('frances@teli.africa');
-  const [password, setPassword] = useState('password123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [show, setShow] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -66,26 +66,6 @@ export default function Login() {
           {busy ? 'Logging in…' : 'Log in'} <ArrowRight size={20} />
         </button>
 
-        <div className="bg-brand-50 text-navy/80 text-xs rounded-xl px-4 py-3 mt-4 space-y-1.5">
-          <p className="font-bold text-navy">Demo accounts (password: <code>password123</code>)</p>
-          <div className="grid grid-cols-1 gap-1">
-            {[
-              { label: 'Learner', email: 'frances@teli.africa' },
-              { label: 'Admin', email: 'admin@teli.africa' },
-              { label: 'Super Admin', email: 'super@teli.africa' },
-            ].map((a) => (
-              <button key={a.email} type="button" onClick={() => setEmail(a.email)}
-                className="flex justify-between items-center text-left hover:text-brand">
-                <span className="font-semibold">{a.label}</span><span className="text-sub">{a.email}</span>
-              </button>
-            ))}
-          </div>
-          <p className="text-sub pt-1">Tap a role to fill it, then <b>Log in</b>.</p>
-        </div>
-
-        <div className="flex items-center gap-3 my-5 text-sub text-sm">
-          <div className="h-px flex-1 bg-black/10" /> or <div className="h-px flex-1 bg-black/10" />
-        </div>
         <GoogleButton />
 
         <p className="text-center text-sub mt-6">

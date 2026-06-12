@@ -54,7 +54,7 @@ export default function AdminUsers() {
           <h1 className="text-[26px] font-extrabold text-navy">Manage Users</h1>
           <p className="text-sub text-sm">{users.length} accounts</p>
         </div>
-        <button onClick={() => setAdding(true)} className="btn-primary px-4 py-2.5 text-sm"><UserPlus size={18} /> Add</button>
+        <button onClick={() => setAdding(true)} className="btn-primary px-4 py-2.5 text-sm"><UserPlus size={18} /> Invite</button>
       </div>
 
       {error && <div className="mx-5 mt-3 text-sm bg-red-50 text-red-600 rounded-xl px-4 py-3">{error}</div>}
@@ -137,46 +137,68 @@ export default function AdminUsers() {
 function AddUser({ isSuper, onClose, onAdded }: { isSuper: boolean; onClose: () => void; onAdded: () => void }) {
   const [fullName, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [role, setRole] = useState<Role>('learner');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [done, setDone] = useState<{ emailed: boolean; tempPassword?: string; email: string } | null>(null);
 
   const save = async () => {
     setBusy(true); setError('');
-    try { await api.post('/admin/users', { fullName, email, password, role }); onAdded(); }
-    catch (e: any) { setError(e.message); } finally { setBusy(false); }
+    try {
+      const r = await api.post<{ emailed: boolean; tempPassword?: string }>('/admin/users', { fullName, email, role });
+      setDone({ emailed: r.emailed, tempPassword: r.tempPassword, email });
+      onAdded();
+    } catch (e: any) { setError(e.message); } finally { setBusy(false); }
   };
 
   return (
     <div className="absolute inset-0 bg-black/40 flex items-end z-50" onClick={onClose}>
       <div className="bg-white w-full rounded-t-3xl p-5 fade-up" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-extrabold text-navy">Add User</h2>
+          <h2 className="text-xl font-extrabold text-navy">{done ? 'Invitation sent' : 'Invite a user'}</h2>
           <button onClick={onClose} className="w-9 h-9 rounded-full bg-black/[0.05] flex items-center justify-center"><X size={18} /></button>
         </div>
-        {error && <div className="text-sm bg-red-50 text-red-600 rounded-xl px-4 py-3 mb-3">{error}</div>}
-        <div className="space-y-4">
-          <input className="field" placeholder="Full name" value={fullName} onChange={(e) => setName(e.target.value)} />
-          <input className="field" type="email" placeholder="Email address" value={email} onChange={(e) => setEmail(e.target.value)} />
-          <input className="field" type="text" placeholder="Temporary password (8+ chars)" value={password} onChange={(e) => setPassword(e.target.value)} />
-          <div>
-            <span className="text-sm font-bold text-navy">Role</span>
-            <div className="grid grid-cols-3 gap-2 mt-1.5">
-              {(['learner', 'admin', 'super_admin'] as Role[]).map((r) => {
-                const disabled = r !== 'learner' && !isSuper;
-                return (
-                  <button key={r} disabled={disabled} onClick={() => setRole(r)}
-                    className={`py-2.5 rounded-xl border-2 text-xs font-bold ${role === r ? 'border-brand bg-brand-50 text-brand' : 'border-black/10 text-navy'} disabled:opacity-30`}>
-                    {ROLE_LABEL[r]}
-                  </button>
-                );
-              })}
+
+        {done ? (
+          <div className="space-y-3">
+            <div className="rounded-2xl bg-emerald-50 p-4 text-sm text-navy">
+              <p className="font-bold text-emerald-700 mb-1">{done.emailed ? 'Email sent ✅' : 'Account created ✅'}</p>
+              <p>{done.email} can now log in. They'll be asked to set their own password on first login.</p>
             </div>
-            {!isSuper && <p className="text-xs text-sub mt-2">Admins can add learners. Only a Super Admin can add staff.</p>}
+            {done.tempPassword && (
+              <div className="rounded-2xl bg-amber-50 p-4 text-sm">
+                <p className="font-bold text-amber-800">Email isn't configured yet — share this temporary password securely:</p>
+                <p className="font-mono text-navy text-base mt-1 select-all bg-white rounded-lg px-3 py-2 inline-block">{done.tempPassword}</p>
+              </div>
+            )}
+            <button onClick={onClose} className="btn-primary w-full mt-2">Done</button>
           </div>
-        </div>
-        <button onClick={save} disabled={busy || !fullName || !email || !password} className="btn-primary w-full mt-5">{busy ? 'Creating…' : 'Create User'}</button>
+        ) : (
+          <>
+            {error && <div className="text-sm bg-red-50 text-red-600 rounded-xl px-4 py-3 mb-3">{error}</div>}
+            <div className="space-y-4">
+              <input className="field" placeholder="Full name" value={fullName} onChange={(e) => setName(e.target.value)} />
+              <input className="field" type="email" placeholder="Email address" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <div>
+                <span className="text-sm font-bold text-navy">Role</span>
+                <div className="grid grid-cols-3 gap-2 mt-1.5">
+                  {(['learner', 'admin', 'super_admin'] as Role[]).map((r) => {
+                    const disabled = r !== 'learner' && !isSuper;
+                    return (
+                      <button key={r} disabled={disabled} onClick={() => setRole(r)}
+                        className={`py-2.5 rounded-xl border-2 text-xs font-bold ${role === r ? 'border-brand bg-brand-50 text-brand' : 'border-black/10 text-navy'} disabled:opacity-30`}>
+                        {ROLE_LABEL[r]}
+                      </button>
+                    );
+                  })}
+                </div>
+                {!isSuper && <p className="text-xs text-sub mt-2">Admins can add learners. Only a Super Admin can add staff.</p>}
+              </div>
+              <p className="text-xs text-sub">A secure password is generated and emailed automatically — you don't set one.</p>
+            </div>
+            <button onClick={save} disabled={busy || !fullName || !email} className="btn-primary w-full mt-5">{busy ? 'Sending…' : 'Send Invitation'}</button>
+          </>
+        )}
       </div>
     </div>
   );

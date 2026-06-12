@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Pencil, Trash2, X, Search, ListTree, Eye, EyeOff, Award } from 'lucide-react';
-import { api, CourseCard, CourseDetail, naira } from '../../api';
+import { Plus, Pencil, Trash2, X, Search, ListTree, Eye, EyeOff, Award, Ticket, Copy, Check, Power } from 'lucide-react';
+import { api, CourseCard, CourseDetail, AccessCode, naira } from '../../api';
 import { StatusBar, CourseThumb, Spinner } from '../../components/ui';
 
 const ICONS = ['target', 'megaphone', 'handshake', 'plant', 'doc', 'institution', 'shield', 'chart'];
@@ -13,6 +13,7 @@ export default function AdminCourses() {
   const [courses, setCourses] = useState<CourseCard[] | null>(null);
   const [q, setQ] = useState('');
   const [editId, setEditId] = useState<number | 'new' | null>(null);
+  const [codesFor, setCodesFor] = useState<CourseCard | null>(null);
 
   const load = () => api.get<{ courses: CourseCard[] }>('/courses').then((d) => setCourses(d.courses));
   useEffect(() => { load(); }, []);
@@ -54,15 +55,26 @@ export default function AdminCourses() {
               <button onClick={() => setEditId(c.id)} className="w-9 h-9 rounded-full bg-black/[0.05] flex items-center justify-center text-navy"><Pencil size={16} /></button>
               <button onClick={() => remove(c)} className="w-9 h-9 rounded-full bg-red-50 flex items-center justify-center text-red-500"><Trash2 size={16} /></button>
             </div>
-            <button onClick={() => nav(`/admin/courses/${c.slug}/content`)}
-              className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-brand/30 text-brand font-bold text-sm">
-              <ListTree size={16} /> Edit Content (modules & lessons)
-            </button>
+            <div className="flex items-center gap-2 mt-2">
+              {c.visibility === 'private' && <span className="chip bg-navy/10 text-navy">🔒 Private</span>}
+              {c.published === false && <span className="chip bg-amber-100 text-amber-700">Unpublished</span>}
+            </div>
+            <div className="grid grid-cols-2 gap-2 mt-2">
+              <button onClick={() => nav(`/admin/courses/${c.slug}/content`)}
+                className="flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-brand/30 text-brand font-bold text-sm">
+                <ListTree size={16} /> Content
+              </button>
+              <button onClick={() => setCodesFor(c)}
+                className="flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-black/10 text-navy font-bold text-sm">
+                <Ticket size={16} /> Access codes
+              </button>
+            </div>
           </div>
         ))}
       </div>
 
       {editId !== null && <CourseEditor id={editId} onClose={() => setEditId(null)} onSaved={() => { setEditId(null); load(); }} />}
+      {codesFor && <AccessCodes course={codesFor} onClose={() => setCodesFor(null)} />}
     </div>
   );
 }
@@ -70,12 +82,12 @@ export default function AdminCourses() {
 interface Form {
   title: string; category: string; level: string; duration: string; price: string; oldPrice: string;
   summary: string; description: string; color: string; icon: string; outcomes: string[];
-  published: boolean; cert: { minProgress: string; minQuizScore: string; requireQuizzes: boolean };
+  published: boolean; visibility: 'public' | 'private'; cert: { minProgress: string; minQuizScore: string; requireQuizzes: boolean };
 }
 const empty: Form = {
   title: '', category: 'Fundraising', level: 'Beginner', duration: '6 weeks', price: '20000', oldPrice: '',
   summary: '', description: '', color: 'navy', icon: 'target', outcomes: [],
-  published: true, cert: { minProgress: '100', minQuizScore: '0', requireQuizzes: true },
+  published: true, visibility: 'public', cert: { minProgress: '100', minQuizScore: '0', requireQuizzes: true },
 };
 
 function CourseEditor({ id, onClose, onSaved }: { id: number | 'new'; onClose: () => void; onSaved: () => void }) {
@@ -90,7 +102,7 @@ function CourseEditor({ id, onClose, onSaved }: { id: number | 'new'; onClose: (
       title: c.title, category: c.category, level: c.level, duration: c.duration,
       price: String(c.price), oldPrice: c.oldPrice ? String(c.oldPrice) : '',
       summary: c.summary, description: c.description, color: c.color, icon: c.icon,
-      outcomes: c.outcomes, published: c.published,
+      outcomes: c.outcomes, published: c.published, visibility: c.visibility || 'public',
       cert: { minProgress: String(c.cert.minProgress), minQuizScore: String(c.cert.minQuizScore), requireQuizzes: c.cert.requireQuizzes },
     }));
   }, [id]);
@@ -104,7 +116,7 @@ function CourseEditor({ id, onClose, onSaved }: { id: number | 'new'; onClose: (
         title: f.title, category: f.category, level: f.level, duration: f.duration,
         price: Number(f.price), oldPrice: f.oldPrice ? Number(f.oldPrice) : null,
         summary: f.summary, description: f.description || f.summary, color: f.color, icon: f.icon,
-        outcomes: f.outcomes.filter(Boolean), published: f.published,
+        outcomes: f.outcomes.filter(Boolean), published: f.published, visibility: f.visibility,
         cert: { minProgress: Number(f.cert.minProgress), minQuizScore: Number(f.cert.minQuizScore), requireQuizzes: f.cert.requireQuizzes },
       };
       if (id === 'new') await api.post('/admin/courses', payload);
@@ -157,6 +169,18 @@ function CourseEditor({ id, onClose, onSaved }: { id: number | 'new'; onClose: (
             ))}</div>
           </L>
 
+          {/* visibility */}
+          <L label="Visibility">
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => set('visibility', 'public')} className={`py-3 rounded-xl border-2 text-sm font-bold ${f.visibility === 'public' ? 'border-brand bg-brand-50 text-brand' : 'border-black/10 text-navy'}`}>
+                🌍 Public<br /><span className="text-[10px] font-normal text-sub">Anyone can buy</span>
+              </button>
+              <button onClick={() => set('visibility', 'private')} className={`py-3 rounded-xl border-2 text-sm font-bold ${f.visibility === 'private' ? 'border-brand bg-brand-50 text-brand' : 'border-black/10 text-navy'}`}>
+                🔒 Private<br /><span className="text-[10px] font-normal text-sub">Access code only</span>
+              </button>
+            </div>
+          </L>
+
           {/* certificate conditions */}
           <div className="card p-4 bg-brand-50/40 border-brand/10">
             <p className="font-bold text-navy flex items-center gap-2 mb-3"><Award size={17} className="text-brand" /> Certificate auto-issue conditions</p>
@@ -186,4 +210,65 @@ function CourseEditor({ id, onClose, onSaved }: { id: number | 'new'; onClose: (
 
 function L({ label, children }: { label: string; children: React.ReactNode }) {
   return <label className="block"><span className="text-sm font-bold text-navy">{label}</span><div className="mt-1.5">{children}</div></label>;
+}
+
+function AccessCodes({ course, onClose }: { course: CourseCard; onClose: () => void }) {
+  const [codes, setCodes] = useState<AccessCode[] | null>(null);
+  const [emails, setEmails] = useState('');
+  const [count, setCount] = useState('5');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [copied, setCopied] = useState('');
+
+  const load = () => api.get<{ codes: AccessCode[] }>(`/admin/courses/${course.id}/access-codes`).then((d) => setCodes(d.codes));
+  useEffect(() => { load(); }, []);
+
+  const generate = async () => {
+    setBusy(true); setMsg('');
+    try {
+      const r = await api.post<{ created: any[]; emailed: boolean }>(`/admin/courses/${course.id}/access-codes`,
+        emails.trim() ? { emails } : { count: Number(count) });
+      setMsg(`${r.created.length} code(s) created${r.emailed ? ' and emailed' : ''}.`);
+      setEmails(''); load();
+    } finally { setBusy(false); }
+  };
+  const toggle = async (c: AccessCode) => { await api.post(`/admin/access-codes/${c.id}/toggle`); load(); };
+  const copy = (code: string) => { navigator.clipboard?.writeText(code); setCopied(code); setTimeout(() => setCopied(''), 1500); };
+
+  return (
+    <div className="absolute inset-0 bg-black/40 flex items-end z-50" onClick={onClose}>
+      <div className="bg-white w-full rounded-t-3xl p-5 fade-up max-h-[90%] overflow-y-auto no-scrollbar" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-xl font-extrabold text-navy">Access codes</h2>
+          <button onClick={onClose} className="w-9 h-9 rounded-full bg-black/[0.05] flex items-center justify-center"><X size={18} /></button>
+        </div>
+        <p className="text-sm text-sub mb-4">{course.title}{course.visibility !== 'private' && <span className="text-amber-600"> — tip: set this course to Private so codes are required.</span>}</p>
+
+        <div className="card p-4 bg-brand-50/40">
+          <p className="text-sm font-bold text-navy mb-2">Invite by email (one personalised code each, emailed automatically)</p>
+          <textarea className="field h-16 text-sm" placeholder="person1@email.com, person2@email.com" value={emails} onChange={(e) => setEmails(e.target.value)} />
+          {!emails.trim() && (
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-sm text-sub">or generate</span>
+              <input className="field w-20 py-2 text-sm" type="number" value={count} onChange={(e) => setCount(e.target.value)} />
+              <span className="text-sm text-sub">generic codes</span>
+            </div>
+          )}
+          <button onClick={generate} disabled={busy} className="btn-primary w-full mt-3">{busy ? 'Working…' : emails.trim() ? 'Create & email codes' : 'Generate codes'}</button>
+          {msg && <p className="text-sm text-emerald-600 mt-2">{msg}</p>}
+        </div>
+
+        <p className="text-sm font-bold text-navy mt-5 mb-2">Existing codes</p>
+        <div className="space-y-2">
+          {!codes ? <Spinner /> : codes.length === 0 ? <p className="text-sub text-sm">No codes yet.</p> : codes.map((c) => (
+            <div key={c.id} className={`card p-3 flex items-center gap-2 ${c.active ? '' : 'opacity-50'}`}>
+              <button onClick={() => copy(c.code)} className="font-mono font-bold text-navy flex items-center gap-1.5">{c.code} {copied === c.code ? <Check size={14} className="text-emerald-500" /> : <Copy size={13} className="text-sub" />}</button>
+              <div className="flex-1 text-xs text-sub truncate">{c.email || 'anyone'} · used {c.usedCount}/{c.maxUses}</div>
+              <button onClick={() => toggle(c)} className="w-8 h-8 rounded-full bg-black/[0.05] flex items-center justify-center text-navy"><Power size={14} /></button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }

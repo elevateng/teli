@@ -47,28 +47,15 @@ export default function GoogleButton() {
     document.body.appendChild(s);
   }, [cfg]);
 
-  const devSignIn = async () => {
-    setError('');
-    try { const u = await googleAuth({ devEmail: 'google.user@teli.africa', devName: 'Google User' }); nav(homeForRole(u), { replace: true }); }
-    catch (e: any) { setError(e.message); }
-  };
+  // Only show Google sign-in when it's actually configured. No insecure fallback.
+  if (!cfg?.googleEnabled) return null;
 
-  if (cfg?.googleEnabled) {
-    return (
-      <div>
-        <div ref={slotRef} className="flex justify-center" />
-        {error && <p className="text-sm text-red-500 mt-2 text-center">{error}</p>}
-      </div>
-    );
-  }
-
-  // Dev fallback — fully functional sign-in without a Google client ID
   return (
     <div>
-      <button type="button" onClick={devSignIn}
-        className="w-full border border-black/10 rounded-2xl py-4 flex items-center justify-center gap-3 font-semibold text-navy active:scale-[0.99] transition">
-        <GoogleG /> Continue with Google
-      </button>
+      <div className="flex items-center gap-3 my-5 text-sub text-sm">
+        <div className="h-px flex-1 bg-black/10" /> or <div className="h-px flex-1 bg-black/10" />
+      </div>
+      <div ref={slotRef} className="flex justify-center" />
       {error && <p className="text-sm text-red-500 mt-2 text-center">{error}</p>}
     </div>
   );
