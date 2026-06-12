@@ -271,24 +271,100 @@ function QuizEditor({ quiz, onChange }: { quiz: any; onChange: (q: any) => void 
   );
 }
 
+const ACTIVITY_TYPES = [
+  { k: 'match', label: 'Match pairs' },
+  { k: 'choice', label: 'Multiple choice' },
+  { k: 'reflection', label: 'Reflection' },
+  { k: 'sort', label: 'Put in order' },
+];
+
 function ActivityEditor({ activity, onChange }: { activity: any; onChange: (a: any) => void }) {
-  const pairs = activity.pairs || [];
-  const upd = (i: number, k: string, v: string) => onChange({ ...activity, pairs: pairs.map((p: any, j: number) => j === i ? { ...p, [k]: v } : p) });
+  const type = activity.type || 'match';
+  const set = (patch: any) => onChange({ ...activity, ...patch });
+
   return (
     <div>
-      <Field label="Prompt"><input className="field" value={activity.prompt || ''} onChange={(e) => onChange({ ...activity, prompt: e.target.value })} /></Field>
+      <Field label="Activity type">
+        <div className="grid grid-cols-2 gap-2">
+          {ACTIVITY_TYPES.map((t) => (
+            <button key={t.k} onClick={() => set({ type: t.k })} className={`py-2.5 rounded-xl border-2 text-sm font-bold ${type === t.k ? 'border-brand bg-brand-50 text-brand' : 'border-black/10 text-navy'}`}>{t.label}</button>
+          ))}
+        </div>
+      </Field>
+      <Field label="Prompt / question"><input className="field" value={activity.prompt || ''} onChange={(e) => set({ prompt: e.target.value })} placeholder="What should learners do?" /></Field>
+
+      {type === 'match' && <MatchEditor activity={activity} set={set} />}
+      {type === 'choice' && <ChoiceEditor activity={activity} set={set} />}
+      {type === 'reflection' && (
+        <Field label="Placeholder (optional)"><input className="field" value={activity.placeholder || ''} onChange={(e) => set({ placeholder: e.target.value })} placeholder="e.g. How will you apply this?" /></Field>
+      )}
+      {type === 'sort' && <SortEditor activity={activity} set={set} />}
+    </div>
+  );
+}
+
+function MatchEditor({ activity, set }: { activity: any; set: (p: any) => void }) {
+  const pairs = activity.pairs || [];
+  const upd = (i: number, k: string, v: string) => set({ pairs: pairs.map((p: any, j: number) => j === i ? { ...p, [k]: v } : p) });
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-2 mt-1">
+        <input className="field py-2 text-sm" value={activity.leftLabel || ''} onChange={(e) => set({ leftLabel: e.target.value })} placeholder="Left column label (e.g. Items)" />
+        <input className="field py-2 text-sm" value={activity.rightLabel || ''} onChange={(e) => set({ rightLabel: e.target.value })} placeholder="Right column label (e.g. Matches)" />
+      </div>
       <p className="text-sm font-bold text-navy mt-3 mb-2">Match pairs</p>
       {pairs.map((p: any, i: number) => (
         <div key={i} className="card p-3 mb-2 bg-black/[0.02]">
           <div className="flex gap-2">
-            <input className="field py-2 text-sm flex-1" value={p.left || ''} onChange={(e) => upd(i, 'left', e.target.value)} placeholder="Left (term)" />
-            <button onClick={() => onChange({ ...activity, pairs: pairs.filter((_: any, j: number) => j !== i) })} className="text-red-500"><Trash2 size={15} /></button>
+            <input className="field py-2 text-sm flex-1" value={p.left || ''} onChange={(e) => upd(i, 'left', e.target.value)} placeholder="Item (left)" />
+            <button onClick={() => set({ pairs: pairs.filter((_: any, j: number) => j !== i) })} className="text-red-500"><Trash2 size={15} /></button>
           </div>
-          <input className="field py-2 text-sm mt-2 w-full" value={p.right || ''} onChange={(e) => upd(i, 'right', e.target.value)} placeholder="Right (match)" />
+          <input className="field py-2 text-sm mt-2 w-full" value={p.right || ''} onChange={(e) => upd(i, 'right', e.target.value)} placeholder="Correct match (right)" />
           <input className="field py-1.5 text-sm mt-2 w-full" value={p.leftHint || ''} onChange={(e) => upd(i, 'leftHint', e.target.value)} placeholder="Hint (optional)" />
         </div>
       ))}
-      <button onClick={() => onChange({ ...activity, pairs: [...pairs, { left: '', right: '', leftHint: '' }] })} className="text-brand font-bold text-sm flex items-center gap-1"><Plus size={15} /> Add pair</button>
-    </div>
+      <button onClick={() => set({ pairs: [...pairs, { left: '', right: '', leftHint: '' }] })} className="text-brand font-bold text-sm flex items-center gap-1"><Plus size={15} /> Add pair</button>
+    </>
+  );
+}
+
+function ChoiceEditor({ activity, set }: { activity: any; set: (p: any) => void }) {
+  const options = activity.options || [];
+  const upd = (i: number, patch: any) => set({ options: options.map((o: any, j: number) => j === i ? { ...o, ...patch } : o) });
+  return (
+    <>
+      <label className="flex items-center gap-2 mt-1 mb-2 text-sm font-semibold text-navy">
+        <input type="checkbox" className="accent-brand w-4 h-4" checked={!!activity.multi} onChange={(e) => set({ multi: e.target.checked })} />
+        Allow multiple correct answers
+      </label>
+      <p className="text-sm font-bold text-navy mb-2">Options (tick the correct one{activity.multi ? 's' : ''})</p>
+      {options.map((o: any, i: number) => (
+        <div key={i} className="flex items-center gap-2 mb-2">
+          <input type="checkbox" className="accent-brand w-4 h-4 shrink-0" checked={!!o.correct} onChange={(e) => upd(i, { correct: e.target.checked })} />
+          <input className="field py-2 text-sm flex-1" value={o.text || ''} onChange={(e) => upd(i, { text: e.target.value })} placeholder={`Option ${i + 1}`} />
+          <button onClick={() => set({ options: options.filter((_: any, j: number) => j !== i) })} className="text-red-500"><Trash2 size={15} /></button>
+        </div>
+      ))}
+      <button onClick={() => set({ options: [...options, { text: '', correct: false }] })} className="text-brand font-bold text-sm flex items-center gap-1"><Plus size={15} /> Add option</button>
+      <Field label="Explanation (shown after answering)"><textarea className="field h-14 text-sm mt-1" value={activity.explanation || ''} onChange={(e) => set({ explanation: e.target.value })} /></Field>
+    </>
+  );
+}
+
+function SortEditor({ activity, set }: { activity: any; set: (p: any) => void }) {
+  const items = activity.items || [];
+  return (
+    <>
+      <p className="text-sm font-bold text-navy mt-3 mb-1">Items in the correct order</p>
+      <p className="text-xs text-sub mb-2">Learners see these shuffled and must restore this order.</p>
+      {items.map((it: string, i: number) => (
+        <div key={i} className="flex items-center gap-2 mb-2">
+          <span className="w-6 h-6 rounded-full bg-black/[0.06] text-navy text-xs font-bold flex items-center justify-center shrink-0">{i + 1}</span>
+          <input className="field py-2 text-sm flex-1" value={it} onChange={(e) => set({ items: items.map((x: string, j: number) => j === i ? e.target.value : x) })} placeholder={`Step ${i + 1}`} />
+          <button onClick={() => set({ items: items.filter((_: string, j: number) => j !== i) })} className="text-red-500"><Trash2 size={15} /></button>
+        </div>
+      ))}
+      <button onClick={() => set({ items: [...items, ''] })} className="text-brand font-bold text-sm flex items-center gap-1"><Plus size={15} /> Add item</button>
+    </>
   );
 }

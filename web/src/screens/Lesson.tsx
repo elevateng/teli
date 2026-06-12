@@ -4,6 +4,7 @@ import {
   ChevronLeft, Bookmark, MoreVertical, Heart, Shield, Users, Lightbulb, Quote,
   ArrowRight, ArrowLeft, Play, Pause, Maximize, Captions, Settings, Clock, SignalHigh,
   FileText, Puzzle, CheckCircle2, ListChecks, Flag, Home, GraduationCap, Download, StickyNote,
+  Check, ChevronUp, ChevronDown,
 } from 'lucide-react';
 import { api, CourseDetail as CD, LessonNode, ModuleNode } from '../api';
 import { Spinner, ProgressBar } from '../components/ui';
@@ -247,66 +248,73 @@ function ReadingLesson({ lesson }: { lesson: LessonNode }) {
   );
 }
 
-/* ---------------- ACTIVITY (tap to match) ---------------- */
+/* ---------------- ACTIVITY (multiple interactive types) ---------------- */
 function ActivityLesson({ lesson }: { lesson: LessonNode }) {
-  const activity = lesson.body.activity as { prompt: string; pairs: { left: string; leftHint: string; right: string }[] };
-  const lefts = activity.pairs;
-  const rights = useMemo(() => shuffle(activity.pairs.map((p) => p.right)), [lesson.id]);
-
-  const [selected, setSelected] = useState<string | null>(null);
-  const [matches, setMatches] = useState<Record<string, string>>({}); // left -> right
-  const [checked, setChecked] = useState(false);
-
-  const place = (left: string) => {
-    if (!selected) return;
-    setMatches((m) => {
-      const next = { ...m };
-      // remove this right from any other slot
-      for (const k of Object.keys(next)) if (next[k] === selected) delete next[k];
-      next[left] = selected;
-      return next;
-    });
-    setSelected(null);
-    setChecked(false);
-  };
-
-  const usedRights = new Set(Object.values(matches));
-  const allMatched = Object.keys(matches).length === lefts.length;
-  const correctCount = lefts.filter((p) => matches[p.left] === p.right).length;
-  const allCorrect = checked && correctCount === lefts.length;
-
+  const activity = (lesson.body.activity || {}) as any;
+  const type = activity.type || 'match';
   return (
     <div className="px-5 py-6">
       <span className="chip bg-violet-100 text-violet-700 inline-flex items-center gap-1.5"><Puzzle size={14} /> Interactive Activity</span>
       <h2 className="text-[22px] font-extrabold text-navy mt-3 leading-tight">{activity.prompt}</h2>
-      <p className="text-sub text-sm mt-2">Tap a strategy, then tap the donor type it fits best.</p>
+      {type === 'match' && <MatchActivity activity={activity} lessonId={lesson.id} />}
+      {type === 'choice' && <ChoiceActivity activity={activity} />}
+      {type === 'reflection' && <ReflectionActivity activity={activity} lessonId={lesson.id} />}
+      {type === 'sort' && <SortActivity activity={activity} lessonId={lesson.id} />}
+    </div>
+  );
+}
 
+function FeedbackBar({ done, doneText, pendingText }: { done: boolean; doneText: string; pendingText: string }) {
+  return (
+    <div className={`mt-5 rounded-2xl p-4 flex items-center gap-3 ${done ? 'bg-emerald-50' : 'bg-violet-50'}`}>
+      <span className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${done ? 'bg-emerald-500' : 'bg-violet-500'}`}>
+        {done ? <CheckCircle2 size={20} className="text-white" /> : <Lightbulb size={20} className="text-white" />}
+      </span>
+      <p className="font-bold text-navy text-sm flex-1">{done ? doneText : pendingText}</p>
+    </div>
+  );
+}
+
+/* tap-to-match pairs */
+function MatchActivity({ activity, lessonId }: { activity: any; lessonId: number }) {
+  const lefts: any[] = activity.pairs || [];
+  const rights = useMemo<string[]>(() => shuffle(lefts.map((p: any) => String(p.right))), [lessonId]);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [matches, setMatches] = useState<Record<string, string>>({});
+  const [checked, setChecked] = useState(false);
+
+  const place = (left: string) => {
+    if (!selected) return;
+    setMatches((m) => { const next = { ...m }; for (const k of Object.keys(next)) if (next[k] === selected) delete next[k]; next[left] = selected; return next; });
+    setSelected(null); setChecked(false);
+  };
+  const usedRights = new Set(Object.values(matches));
+  const allMatched = Object.keys(matches).length === lefts.length;
+  const correctCount = lefts.filter((p: any) => matches[p.left] === p.right).length;
+  const allCorrect = checked && correctCount === lefts.length;
+
+  return (
+    <>
+      <p className="text-sub text-sm mt-2">Tap an option on the right, then tap the item it belongs to.</p>
       <div className="grid grid-cols-2 gap-3 mt-5">
-        {/* left: donor types + drop zones */}
         <div className="space-y-3">
-          <p className="text-xs font-bold text-sub uppercase">Donor Types</p>
-          {lefts.map((p) => {
-            const placed = matches[p.left];
-            const ok = checked ? placed === p.right : null;
+          <p className="text-xs font-bold text-sub uppercase">{activity.leftLabel || 'Items'}</p>
+          {lefts.map((p: any) => {
+            const placed = matches[p.left]; const ok = checked ? placed === p.right : null;
             return (
               <button key={p.left} onClick={() => place(p.left)}
                 className={`w-full text-left rounded-2xl border p-3 transition ${ok === true ? 'border-emerald-400 bg-emerald-50' : ok === false ? 'border-red-300 bg-red-50' : 'border-black/10 bg-white'}`}>
                 <h4 className="font-bold text-navy text-sm">{p.left}</h4>
-                <p className="text-[11px] text-sub leading-tight mt-0.5">{p.leftHint}</p>
-                <div className={`mt-2 rounded-xl border border-dashed px-2 py-2 text-xs font-semibold text-center ${placed ? 'border-brand/40 bg-brand-50 text-navy' : 'border-black/20 text-sub'}`}>
-                  {placed || 'Drop here'}
-                </div>
+                {p.leftHint && <p className="text-[11px] text-sub leading-tight mt-0.5">{p.leftHint}</p>}
+                <div className={`mt-2 rounded-xl border border-dashed px-2 py-2 text-xs font-semibold text-center ${placed ? 'border-brand/40 bg-brand-50 text-navy' : 'border-black/20 text-sub'}`}>{placed || 'Tap to place'}</div>
               </button>
             );
           })}
         </div>
-
-        {/* right: strategies */}
         <div className="space-y-3">
-          <p className="text-xs font-bold text-sub uppercase">Strategies</p>
-          {rights.map((r) => {
-            const used = usedRights.has(r);
-            const sel = selected === r;
+          <p className="text-xs font-bold text-sub uppercase">{activity.rightLabel || 'Matches'}</p>
+          {rights.map((r: string) => {
+            const used = usedRights.has(r); const sel = selected === r;
             return (
               <button key={r} onClick={() => setSelected(sel ? null : r)} disabled={used && !sel}
                 className={`w-full text-left rounded-2xl border p-3 text-sm font-semibold transition ${sel ? 'border-brand bg-brand text-white' : used ? 'border-black/5 bg-black/[0.03] text-sub' : 'border-black/10 bg-white text-navy'}`}>
@@ -316,24 +324,94 @@ function ActivityLesson({ lesson }: { lesson: LessonNode }) {
           })}
         </div>
       </div>
+      <FeedbackBar done={allCorrect} doneText="Perfect match! Well done." pendingText="Match all the items, then check." />
+      {!allCorrect && <button onClick={() => setChecked(true)} disabled={!allMatched} className="btn-primary w-full mt-4 disabled:opacity-50">Check Answers</button>}
+    </>
+  );
+}
 
-      <div className={`mt-6 rounded-2xl p-4 flex items-center gap-3 ${allCorrect ? 'bg-emerald-50' : 'bg-violet-50'}`}>
-        <span className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${allCorrect ? 'bg-emerald-500' : 'bg-violet-500'}`}>
-          {allCorrect ? <CheckCircle2 size={20} className="text-white" /> : <Lightbulb size={20} className="text-white" />}
-        </span>
-        <div className="flex-1">
-          <p className="font-bold text-navy text-sm">{allCorrect ? 'Perfect match! Well done.' : "You're doing great."}</p>
-          <p className="text-xs text-sub">{allCorrect ? 'You can continue to the next lesson.' : 'Match all the items, then check your answers.'}</p>
-        </div>
-        <span className="chip bg-white text-navy border border-black/10">{checked ? correctCount : Object.keys(matches).length} / {lefts.length}</span>
+/* multiple choice / poll (single or multi-select) */
+function ChoiceActivity({ activity }: { activity: any }) {
+  const options = activity.options || [];
+  const multi = !!activity.multi;
+  const [picked, setPicked] = useState<number[]>([]);
+  const [checked, setChecked] = useState(false);
+  const toggle = (i: number) => { setChecked(false); setPicked(multi ? (picked.includes(i) ? picked.filter((x) => x !== i) : [...picked, i]) : [i]); };
+  const correctIdx = options.map((o: any, i: number) => (o.correct ? i : -1)).filter((i: number) => i >= 0);
+  const isCorrect = checked && picked.length === correctIdx.length && correctIdx.every((i: number) => picked.includes(i));
+
+  return (
+    <>
+      <p className="text-sub text-sm mt-2">{multi ? 'Select all that apply.' : 'Choose the best answer.'}</p>
+      <div className="space-y-2 mt-4">
+        {options.map((o: any, i: number) => {
+          const sel = picked.includes(i);
+          const cls = checked ? (o.correct ? 'border-emerald-400 bg-emerald-50' : sel ? 'border-red-300 bg-red-50' : 'border-black/10') : sel ? 'border-brand bg-brand-50' : 'border-black/10';
+          return (
+            <button key={i} onClick={() => toggle(i)} className={`w-full text-left rounded-2xl border p-3.5 flex items-center gap-3 ${cls}`}>
+              <span className={`w-5 h-5 ${multi ? 'rounded-md' : 'rounded-full'} border-2 flex items-center justify-center shrink-0 ${sel ? 'border-brand bg-brand text-white' : 'border-black/25'}`}>{sel && <Check size={13} />}</span>
+              <span className="text-navy text-sm font-medium flex-1">{o.text}</span>
+              {checked && o.correct && <CheckCircle2 size={18} className="text-emerald-500" />}
+            </button>
+          );
+        })}
       </div>
+      {checked && activity.explanation && <div className="mt-3 rounded-xl bg-brand-50 p-3 text-sm text-navy"><b className="text-brand">Why: </b>{activity.explanation}</div>}
+      <FeedbackBar done={isCorrect} doneText="Correct! Nicely done." pendingText="Make your choice, then check." />
+      {!isCorrect && <button onClick={() => setChecked(true)} disabled={!picked.length} className="btn-primary w-full mt-4 disabled:opacity-50">Check Answer</button>}
+    </>
+  );
+}
 
-      {!allCorrect && (
-        <button onClick={() => setChecked(true)} disabled={!allMatched} className="btn-primary w-full mt-4 disabled:opacity-50">
-          Check Answers
-        </button>
-      )}
-    </div>
+/* open-ended reflection (saved locally, no grading) */
+function ReflectionActivity({ activity, lessonId }: { activity: any; lessonId: number }) {
+  const key = `teli-reflect-${lessonId}`;
+  const [text, setText] = useState(() => localStorage.getItem(key) || '');
+  useEffect(() => { localStorage.setItem(key, text); }, [text, key]);
+  return (
+    <>
+      <p className="text-sub text-sm mt-2">Take a moment to reflect — your response is saved on your device.</p>
+      <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder={activity.placeholder || 'Write your reflection…'}
+        className="w-full h-40 mt-4 rounded-2xl border border-black/10 p-4 outline-none focus:border-brand/50 text-[15px]" />
+      <div className="mt-3 rounded-2xl bg-violet-50 p-4 flex items-center gap-3">
+        <span className="w-10 h-10 rounded-full bg-violet-500 flex items-center justify-center shrink-0"><Lightbulb size={20} className="text-white" /></span>
+        <p className="text-sm text-navy flex-1">There's no right or wrong answer here — reflection deepens learning.</p>
+      </div>
+    </>
+  );
+}
+
+/* put items in the correct order */
+function SortActivity({ activity, lessonId }: { activity: any; lessonId: number }) {
+  const correct: string[] = activity.items || [];
+  const [order, setOrder] = useState<number[]>(() => shuffle(correct.map((_, i) => i)));
+  const [checked, setChecked] = useState(false);
+  const move = (pos: number, dir: number) => {
+    const ni = pos + dir; if (ni < 0 || ni >= order.length) return;
+    const next = [...order]; [next[pos], next[ni]] = [next[ni], next[pos]]; setOrder(next); setChecked(false);
+  };
+  const isCorrect = checked && order.every((idx, pos) => idx === pos);
+  return (
+    <>
+      <p className="text-sub text-sm mt-2">Arrange these in the correct order.</p>
+      <div className="space-y-2 mt-4">
+        {order.map((idx, pos) => {
+          const ok = checked ? idx === pos : null;
+          return (
+            <div key={idx} className={`flex items-center gap-3 rounded-2xl border p-3 ${ok === true ? 'border-emerald-400 bg-emerald-50' : ok === false ? 'border-red-300 bg-red-50' : 'border-black/10'}`}>
+              <span className="w-6 h-6 rounded-full bg-black/[0.06] text-navy text-xs font-bold flex items-center justify-center shrink-0">{pos + 1}</span>
+              <span className="text-navy text-sm flex-1">{correct[idx]}</span>
+              <div className="flex flex-col">
+                <button onClick={() => move(pos, -1)} disabled={pos === 0} className="text-sub disabled:opacity-30"><ChevronUp size={18} /></button>
+                <button onClick={() => move(pos, 1)} disabled={pos === order.length - 1} className="text-sub disabled:opacity-30"><ChevronDown size={18} /></button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <FeedbackBar done={isCorrect} doneText="Perfect order!" pendingText="Arrange them, then check." />
+      {!isCorrect && <button onClick={() => setChecked(true)} className="btn-primary w-full mt-4">Check Order</button>}
+    </>
   );
 }
 
