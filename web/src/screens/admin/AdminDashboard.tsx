@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, BookCopy, GraduationCap, Award, TrendingUp, LogOut, ShieldCheck, BadgeCheck, ScrollText } from 'lucide-react';
+import { Users, BookCopy, GraduationCap, Award, TrendingUp, LogOut, ShieldCheck, BadgeCheck, ScrollText, Mail } from 'lucide-react';
 import { api, AdminStats, naira } from '../../api';
 import { StatusBar, Wordmark, Spinner } from '../../components/ui';
 import { useAuth } from '../../auth';
@@ -85,6 +85,7 @@ export default function AdminDashboard() {
       <div className="px-5 mt-3 grid grid-cols-2 gap-3">
         <button onClick={() => nav('/admin/coupons')} className="py-3 rounded-2xl border-2 border-black/10 font-bold text-navy">Coupons</button>
         <button onClick={() => nav('/admin/audit')} className="py-3 rounded-2xl border-2 border-black/10 font-bold text-navy flex items-center justify-center gap-2"><ScrollText size={17} /> Audit Log</button>
+        <button onClick={() => nav('/admin/email')} className="py-3 rounded-2xl border-2 border-black/10 font-bold text-navy flex items-center justify-center gap-2 col-span-2"><Mail size={17} /> Email diagnostics</button>
       </div>
 
       <div className="px-5 mt-4">

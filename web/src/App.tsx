@@ -18,6 +18,7 @@ import AdminLearnerDetail from './screens/admin/AdminLearnerDetail';
 import CourseContentEditor from './screens/admin/CourseContentEditor';
 import AdminCourseAssignments from './screens/admin/AdminCourseAssignments';
 import AdminCourseAnalytics from './screens/admin/AdminCourseAnalytics';
+import AdminEmail from './screens/admin/AdminEmail';
 
 import Checkout from './screens/Checkout';
 import CheckoutCallback from './screens/CheckoutCallback';
@@ -216,6 +217,7 @@ export default function App() {
         <Route path="/admin/courses/:slug/content" element={<CourseContentEditor />} />
         <Route path="/admin/courses/:slug/assignments" element={<AdminCourseAssignments />} />
         <Route path="/admin/courses/:slug/analytics" element={<AdminCourseAnalytics />} />
+        <Route path="/admin/email" element={<AdminEmail />} />
       </Route>
 
       {/* full-screen protected */}

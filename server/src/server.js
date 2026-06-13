@@ -2098,8 +2098,16 @@ app.post('/api/me/invite', authOptional, authRequired, ah(async (req, res) => {
 }));
 
 app.get('/api/admin/email-log', authOptional, requireRole('admin', 'super_admin'), (_req, res) => {
-  res.json({ enabled: emailEnabled, messages: sentMail.slice(0, 50) });
+  res.json({ enabled: emailEnabled, from: config.MAIL_FROM, host: config.SMTP_HOST || null, port: config.SMTP_PORT, user: config.SMTP_USER || null, messages: sentMail.slice(0, 50) });
 });
+
+// send a test email to the requesting admin and return the exact result/error
+app.post('/api/admin/email-test', authOptional, requireRole('admin', 'super_admin'), ah(async (req, res) => {
+  const to = String(req.body?.to || req.user.email).trim();
+  const rec = await sendMail({ to, subject: 'TELI email test ✅', title: 'Email is working',
+    html: `<p>This is a test email from TELI to confirm delivery is working.</p><p style="color:#5b6577;font-size:13px">If you received this, verification & welcome emails will deliver too.</p>` });
+  res.json({ enabled: emailEnabled, to, result: rec });
+}));
 
 // --------------------------- course communities ---------------------------
 // Each course has its own community space (Circle-style). Only enrolled
