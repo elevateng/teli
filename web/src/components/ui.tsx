@@ -95,13 +95,16 @@ export function Wordmark({ withTagline = false, className = '' }: { withTagline?
   );
 }
 
-export function BookMark({ size = 32 }: { size?: number }) {
+export function BookMark({ size = 32, onDark = false }: { size?: number; onDark?: boolean }) {
   // TELI open-book mark: navy left page, orange right page, with a navy swoosh.
+  // The navy parts (class bm-navy) flip to white on dark backgrounds (onDark prop
+  // for always-dark surfaces; .dark CSS for dark theme).
+  const navy = onDark ? '#ffffff' : '#10254a';
   return (
     <svg width={size} height={size} viewBox="0 0 100 100" className="shrink-0" aria-label="TELI">
-      <path d="M50 24 C 37 15.5, 20 15.5, 7 19.5 L 7 73 C 20 69, 37 69, 50 77.5 Z" fill="#10254a" />
+      <path className="bm-navy" d="M50 24 C 37 15.5, 20 15.5, 7 19.5 L 7 73 C 20 69, 37 69, 50 77.5 Z" fill={navy} />
       <path d="M50 24 C 63 15.5, 80 15.5, 93 19.5 L 93 73 C 80 69, 63 69, 50 77.5 Z" fill="#F26419" />
-      <path d="M50 70 C 63 61.5, 80 61.5, 93 65.5 L 93 73 C 80 69, 63 69, 50 77.5 Z" fill="#10254a" />
+      <path className="bm-navy" d="M50 70 C 63 61.5, 80 61.5, 93 65.5 L 93 73 C 80 69, 63 69, 50 77.5 Z" fill={navy} />
       <rect x="48.4" y="22" width="3.2" height="56" rx="1.6" fill="#fff" />
     </svg>
   );

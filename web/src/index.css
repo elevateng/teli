@@ -98,3 +98,5 @@ body {
 /* the sidebar / borders */
 .dark aside { background-color: #0d1524 !important; }
 .dark .rich-content code { background: rgba(255,255,255,0.1); }
+
+.dark .bm-navy { fill: #ffffff !important; }

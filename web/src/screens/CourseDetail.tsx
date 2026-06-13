@@ -110,14 +110,16 @@ export default function CourseDetail() {
       )}
 
       {course.enrolled && (
-        <button onClick={() => nav(`/community/${course.slug}`)} className="mx-5 mt-3 w-full card p-4 flex items-center gap-3 text-left">
-          <span className="w-11 h-11 rounded-2xl bg-brand-50 flex items-center justify-center"><Users size={20} className="text-brand" /></span>
-          <div className="flex-1">
-            <p className="font-bold text-navy leading-tight">Course community</p>
-            <p className="text-xs text-sub">Discuss, ask questions & share wins with your classmates</p>
-          </div>
-          <ArrowRight size={18} className="text-sub" />
-        </button>
+        <div className="px-5 mt-3">
+          <button onClick={() => nav(`/community/${course.slug}`)} className="w-full card p-4 flex items-center gap-3 text-left">
+            <span className="w-11 h-11 rounded-2xl bg-brand-50 flex items-center justify-center shrink-0"><Users size={20} className="text-brand" /></span>
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-navy leading-tight">Course community</p>
+              <p className="text-xs text-sub">Discuss, ask questions & share wins with your classmates</p>
+            </div>
+            <ArrowRight size={18} className="text-sub shrink-0" />
+          </button>
+        </div>
       )}
 
       {course.enrolled && (
@@ -152,9 +154,9 @@ export default function CourseDetail() {
             {course.progress > 0 ? 'Continue Learning' : 'Start Learning'} <ArrowRight size={20} />
           </button>
         ) : (
-          <div className="flex items-center gap-4">
-            <div>
-              <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-2xl font-extrabold text-navy">{course.price === 0 ? 'Free' : naira(course.price)}</span>
                 {course.oldPrice && course.oldPrice > course.price && <span className="text-sub line-through text-sm">{naira(course.oldPrice)}</span>}
                 {course.price === 0 && course.oldPrice ? (
@@ -163,10 +165,9 @@ export default function CourseDetail() {
                   <span className="chip bg-brand text-white">{pctOff(course.oldPrice, course.price)}% OFF</span>
                 )}
               </div>
-              <p className="text-xs text-sub mt-1">7-day money-back guarantee</p>
             </div>
-            <button onClick={enroll} disabled={busy} className="btn-primary flex-1 text-[16px]">
-              {busy ? 'Enrolling…' : 'Enroll Now'} <ArrowRight size={19} />
+            <button onClick={enroll} disabled={busy} className="btn-primary flex-1 min-w-0 text-[16px] whitespace-nowrap">
+              {busy ? 'Enrolling…' : 'Enroll Now'} <ArrowRight size={19} className="shrink-0" />
             </button>
           </div>
         )}

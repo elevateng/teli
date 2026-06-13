@@ -116,7 +116,7 @@ export default function Checkout() {
         </div>
 
         <div className="flex items-center gap-2 text-xs text-sub mt-4">
-          <Lock size={14} /> Payments are processed securely by {PROVIDER_LABEL[provider] || 'our payment partner'}. 7-day money-back guarantee.
+          <Lock size={14} className="shrink-0" /> Payments are processed securely by {PROVIDER_LABEL[provider] || 'our payment partner'}.
         </div>
       </div>
 

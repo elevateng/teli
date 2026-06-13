@@ -15,7 +15,7 @@ export default function Splash() {
       <div className="relative overflow-hidden flex-1 bg-navy text-white px-7 pb-16 lg:px-16 lg:flex lg:flex-col lg:justify-center"
         style={{ paddingTop: 'max(env(safe-area-inset-top), 3rem)' }}>
         <div className="relative z-10 flex items-center gap-2.5 mb-10">
-          <BookMark size={40} />
+          <BookMark size={40} onDark />
           <span className="text-2xl font-extrabold tracking-tight">TELI</span>
         </div>
         <h1 className="relative z-10 text-[44px] lg:text-[64px] leading-[1.04] font-extrabold">

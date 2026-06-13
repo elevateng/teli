@@ -120,7 +120,7 @@ function AuthShell() {
     <div className="min-h-[100dvh] w-full flex bg-white">
       <div className="hidden lg:flex lg:w-[46%] xl:w-1/2 bg-navy text-white flex-col justify-between p-12 relative overflow-hidden">
         <div className="relative z-10 flex items-center gap-2.5">
-          <BookMark size={40} />
+          <BookMark size={40} onDark />
           <span className="text-2xl font-extrabold tracking-tight">TELI</span>
         </div>
         <div className="relative z-10">

@@ -106,9 +106,9 @@ export default function Explore() {
               </div>
               <h3 className="font-extrabold text-navy leading-tight mt-0.5">{c.title}</h3>
               <p className="text-sm text-sub mt-1 line-clamp-2">{c.summary}</p>
-              <div className="flex items-center gap-4 mt-3 text-xs text-sub">
-                <span className="flex items-center gap-1"><Clock size={14} /> {c.duration}</span>
-                <span className="flex items-center gap-1"><SignalHigh size={14} /> {c.level}</span>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-3 text-xs text-sub">
+                <span className="flex items-center gap-1"><Clock size={14} className="shrink-0" /> {c.duration}</span>
+                <span className="flex items-center gap-1"><SignalHigh size={14} className="shrink-0" /> {c.level}</span>
                 <span className="ml-auto font-extrabold text-navy text-base">{c.price === 0 ? 'Free' : naira(c.price)}</span>
               </div>
             </div>

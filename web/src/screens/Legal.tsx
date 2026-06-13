@@ -36,7 +36,7 @@ function Terms() {
       <H>2. Use of the platform</H>
       <P>TELI grants you a personal, non-transferable licence to access courses and content you are enrolled in, for your own learning. You agree not to share your account, redistribute course materials, attempt to disrupt the service, or use it for any unlawful purpose.</P>
       <H>3. Payments &amp; refunds</H>
-      <P>Some courses are paid. Prices are shown in Nigerian Naira (₦) and processed by our payment partners. Where a course offers a money-back guarantee, the terms shown on the course at purchase apply. Discount codes are single-use unless stated otherwise and cannot be exchanged for cash.</P>
+      <P>Some courses are paid. Prices are shown in Nigerian Naira (₦) and processed by our payment partners. Payment grants you access to the purchased course for your personal learning. Discount codes are single-use unless stated otherwise and cannot be exchanged for cash.</P>
       <H>4. Certificates</H>
       <P>Certificates of completion are issued when a course’s completion conditions are met. They recognise participation and completion and do not constitute an accredited academic qualification unless expressly stated.</P>
       <H>5. Community conduct</H>
