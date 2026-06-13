@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Pencil, Trash2, X, Search, ListTree, Eye, EyeOff, Award, Ticket, Copy, Check, Power, Image as ImageIcon, Tag, Users, Crown, UserPlus, ClipboardList, BarChart3, MessageSquare } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, Search, ListTree, Eye, EyeOff, Award, Ticket, Copy, Check, Power, Image as ImageIcon, Tag, Users, Crown, UserPlus, ClipboardList, BarChart3, MessageSquare, ShieldCheck } from 'lucide-react';
 import { api, CourseCard, CourseDetail, AccessCode, CourseGroup, resizeImage, naira } from '../../api';
 import { StatusBar, CourseThumb, Spinner, Avatar } from '../../components/ui';
+import { useAuth } from '../../auth';
 
 const ICONS = ['target', 'megaphone', 'handshake', 'plant', 'doc', 'institution', 'shield', 'chart'];
 const COLORS = ['navy', 'violet', 'peach', 'green', 'sand', 'blue'];
@@ -10,11 +11,14 @@ const CATEGORIES = ['Fundraising', 'Communication', 'Leadership', 'Monitoring & 
 
 export default function AdminCourses() {
   const nav = useNavigate();
+  const { user } = useAuth();
+  const isSuper = user?.role === 'super_admin';
   const [courses, setCourses] = useState<CourseCard[] | null>(null);
   const [q, setQ] = useState('');
   const [editId, setEditId] = useState<number | 'new' | null>(null);
   const [codesFor, setCodesFor] = useState<CourseCard | null>(null);
   const [groupsFor, setGroupsFor] = useState<CourseCard | null>(null);
+  const [managersFor, setManagersFor] = useState<CourseCard | null>(null);
 
   const load = () => api.get<{ courses: CourseCard[] }>('/courses').then((d) => setCourses(d.courses));
   useEffect(() => { load(); }, []);
@@ -81,6 +85,12 @@ export default function AdminCourses() {
                 className="flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-black/10 text-navy font-bold text-sm">
                 <BarChart3 size={16} /> Analytics
               </button>
+              {isSuper && (
+                <button onClick={() => setManagersFor(c)}
+                  className="flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-black/10 text-navy font-bold text-sm col-span-2">
+                  <ShieldCheck size={16} /> Course managers
+                </button>
+              )}
             </div>
           </div>
         ))}
@@ -89,6 +99,7 @@ export default function AdminCourses() {
       {editId !== null && <CourseEditor id={editId} onClose={() => setEditId(null)} onSaved={() => { setEditId(null); load(); }} />}
       {codesFor && <AccessCodes course={codesFor} onClose={() => setCodesFor(null)} />}
       {groupsFor && <GroupsManager course={groupsFor} onClose={() => setGroupsFor(null)} />}
+      {managersFor && <ManagersModal course={managersFor} onClose={() => setManagersFor(null)} />}
     </div>
   );
 }
@@ -467,6 +478,80 @@ function GroupsManager({ course, onClose }: { course: CourseCard; onClose: () =>
               );
             })}
           </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+interface AdminLite { id: number; name: string; avatar: string | null; email: string; role: string }
+function ManagersModal({ course, onClose }: { course: CourseCard; onClose: () => void }) {
+  const [data, setData] = useState<{ creator: AdminLite | null; managers: AdminLite[] } | null>(null);
+  const [admins, setAdmins] = useState<AdminLite[]>([]);
+  const [adding, setAdding] = useState(false);
+
+  const load = () => api.get<{ creator: AdminLite | null; managers: AdminLite[] }>(`/admin/courses/${course.id}/managers`).then(setData);
+  useEffect(() => {
+    load();
+    api.get<{ admins: AdminLite[] }>('/admin/admins').then((d) => setAdmins(d.admins));
+  }, [course.id]);
+
+  const grant = async (userId: number) => { await api.post(`/admin/courses/${course.id}/managers`, { userId }); setAdding(false); load(); };
+  const revoke = async (userId: number) => { await api.del(`/admin/courses/${course.id}/managers/${userId}`); load(); };
+
+  const managerIds = new Set((data?.managers || []).map((m) => m.id));
+  const creatorId = data?.creator?.id;
+  const available = admins.filter((a) => !managerIds.has(a.id) && a.id !== creatorId);
+
+  return (
+    <div className="absolute inset-0 bg-black/40 flex items-end z-50" onClick={onClose}>
+      <div className="bg-white w-full rounded-t-3xl max-h-[90%] overflow-y-auto no-scrollbar p-5 fade-up" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-xl font-extrabold text-navy">Course managers</h2>
+          <button onClick={onClose} className="w-9 h-9 rounded-full bg-black/[0.05] flex items-center justify-center"><X size={18} /></button>
+        </div>
+        <p className="text-sm text-sub mb-4">{course.title} — grant admins full management access, even if they didn’t create it.</p>
+
+        {!data ? <Spinner /> : (
+          <div className="space-y-2">
+            {data.creator && (
+              <div className="flex items-center gap-3 card p-3">
+                <Avatar name={data.creator.name} src={data.creator.avatar} size={36} />
+                <div className="flex-1 min-w-0"><p className="font-semibold text-navy truncate">{data.creator.name}</p><p className="text-xs text-sub truncate">{data.creator.email}</p></div>
+                <span className="chip bg-navy/10 text-navy">Creator</span>
+              </div>
+            )}
+            {data.managers.map((m) => (
+              <div key={m.id} className="flex items-center gap-3 card p-3">
+                <Avatar name={m.name} src={m.avatar} size={36} />
+                <div className="flex-1 min-w-0"><p className="font-semibold text-navy truncate">{m.name}</p><p className="text-xs text-sub truncate">{m.email}</p></div>
+                <span className="chip bg-brand-50 text-brand">Manager</span>
+                <button onClick={() => revoke(m.id)} className="text-red-500"><X size={16} /></button>
+              </div>
+            ))}
+            {data.managers.length === 0 && <p className="text-xs text-sub px-1">No extra managers yet.</p>}
+          </div>
+        )}
+
+        {adding ? (
+          <div className="mt-3 border-t border-black/5 pt-3">
+            <p className="text-xs font-bold text-sub uppercase mb-2">Grant access to an admin</p>
+            {available.length === 0 ? <p className="text-sm text-sub">No other admins available.</p> : (
+              <div className="max-h-52 overflow-y-auto space-y-1">
+                {available.map((a) => (
+                  <button key={a.id} onClick={() => grant(a.id)} className="w-full flex items-center gap-2 p-2 rounded-xl hover:bg-black/[0.04] text-left">
+                    <Avatar name={a.name} src={a.avatar} size={30} />
+                    <div className="flex-1 min-w-0"><p className="text-sm text-navy truncate">{a.name}</p><p className="text-[11px] text-sub truncate">{a.email}</p></div>
+                    {a.role === 'super_admin' && <span className="chip bg-navy/10 text-navy text-[10px]">Super</span>}
+                    <Plus size={15} className="text-brand" />
+                  </button>
+                ))}
+              </div>
+            )}
+            <button onClick={() => setAdding(false)} className="text-sub text-sm font-semibold mt-2">Done</button>
+          </div>
+        ) : (
+          <button onClick={() => setAdding(true)} className="btn-primary w-full mt-4"><UserPlus size={16} /> Grant an admin access</button>
         )}
       </div>
     </div>

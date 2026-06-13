@@ -316,6 +316,19 @@ CREATE TABLE IF NOT EXISTS dm_messages (
   read        INTEGER NOT NULL DEFAULT 0,
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE TABLE IF NOT EXISTS group_reactions (
+  message_id  INTEGER NOT NULL REFERENCES group_messages(id) ON DELETE CASCADE,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  emoji       TEXT NOT NULL,
+  PRIMARY KEY (message_id, user_id, emoji)
+);
+CREATE TABLE IF NOT EXISTS course_managers (
+  course_id   INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  granted_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (course_id, user_id)
+);
 CREATE TABLE IF NOT EXISTS assignments (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   course_id     INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
@@ -370,6 +383,11 @@ CREATE TABLE IF NOT EXISTS submissions (
   await addColumn('reviews', 'user_id', 'user_id INTEGER');
   // community posts: topic/category for course-scoped feeds
   await addColumn('community_posts', 'category', "category TEXT NOT NULL DEFAULT 'Discussion'");
+  // richer team chat messages (WhatsApp-style: attachments, edits, reply uses parent_id)
+  await addColumn('group_messages', 'image', 'image TEXT');
+  await addColumn('group_messages', 'file_url', 'file_url TEXT');
+  await addColumn('group_messages', 'file_name', 'file_name TEXT');
+  await addColumn('group_messages', 'edited_at', 'edited_at TEXT');
   // tickets: trackable reference + optional course link
   await addColumn('tickets', 'reference', 'reference TEXT');
   await addColumn('tickets', 'course_id', 'course_id INTEGER');

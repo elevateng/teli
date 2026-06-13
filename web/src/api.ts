@@ -95,7 +95,13 @@ export interface CourseGroup { id: number; name: string; courseId?: number; cour
 
 // team chat + direct messages
 export interface ChatAuthor { id: number; name: string; avatar: string | null; role: Role; staff: boolean; roleLabel?: string; leader?: boolean; }
-export interface GroupMessage { id: number; parentId: number | null; body: string; createdAt: string; author: ChatAuthor | null; replies?: GroupMessage[]; }
+export interface MsgReaction { emoji: string; count: number; mine: boolean; }
+export interface ReplyPreview { id: number; author: string; body: string; }
+export interface GroupMessage {
+  id: number; body: string; image: string | null; fileUrl: string | null; fileName: string | null;
+  createdAt: string; editedAt: string | null; author: ChatAuthor | null;
+  replyTo: ReplyPreview | null; reactions: MsgReaction[];
+}
 export interface MyTeam { id: number; name: string; courseTitle: string; courseSlug: string; }
 export interface DMConversation { user: ChatAuthor | null; last: { body: string; createdAt: string; mine: boolean }; unread: number; }
 export interface DMMessage { id: number; body: string; createdAt: string; mine: boolean; }
