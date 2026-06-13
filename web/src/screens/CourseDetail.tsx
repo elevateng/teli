@@ -180,10 +180,15 @@ function Meta({ icon, text }: { icon: React.ReactNode; text: string }) {
 }
 
 function Overview({ course }: { course: CD }) {
+  const allLessons = course.modules.flatMap((m) => m.lessons);
+  const lessonCount = allLessons.filter((l) => l.kind !== 'quiz').length;
+  const quizCount = allLessons.filter((l) => l.kind === 'quiz').length;
+  const resourceCount = allLessons.reduce((n, l) => n + ((l.resources?.length) || 0), 0);
+  const plural = (n: number, s: string) => `${n} ${s}${n === 1 ? '' : 's'}`;
   const includes = [
-    { icon: <PlayCircle size={22} />, label: `${course.lessonCount} Lessons` },
-    { icon: <FileText size={22} />, label: '10 Resources' },
-    { icon: <HelpCircle size={22} />, label: `${course.modules.filter((m) => m.lessons.some((l) => l.kind === 'quiz')).length} Quizzes` },
+    { icon: <PlayCircle size={22} />, label: plural(lessonCount, 'Lesson') },
+    ...(quizCount > 0 ? [{ icon: <HelpCircle size={22} />, label: plural(quizCount, 'Quiz').replace('Quizs', 'Quizzes') }] : []),
+    ...(resourceCount > 0 ? [{ icon: <FileText size={22} />, label: plural(resourceCount, 'Resource') }] : []),
     { icon: <Award size={22} />, label: 'Certificate' },
   ];
   return (

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Tag, ShieldCheck, Lock, CheckCircle2, Loader2, CreditCard } from 'lucide-react';
+import { Tag, ShieldCheck, Lock, CheckCircle2, Loader2, CreditCard, Home } from 'lucide-react';
 import { api, CourseDetail as CD, Quote, RuntimeConfig, naira } from '../api';
 import { TopBar, CourseThumb, Spinner } from '../components/ui';
 
@@ -73,7 +73,8 @@ export default function Checkout() {
 
   return (
     <div className="flex flex-col min-h-full">
-      <TopBar title="Checkout" subtitle="Secure payment" onBack={() => nav(`/course/${slug}`)} />
+      <TopBar title="Checkout" subtitle="Secure payment" onBack={() => nav(`/course/${slug}`)}
+        right={<button onClick={() => nav('/home')} aria-label="Home" className="text-navy"><Home size={20} /></button>} />
 
       <div className="px-5 py-5 flex-1">
         <div className="card p-4 flex items-center gap-4">

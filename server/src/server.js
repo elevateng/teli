@@ -458,9 +458,16 @@ app.post('/api/auth/avatar', authOptional, authRequired, ah(async (req, res) => 
   res.json({ user: publicUser(user) });
 }));
 
-// update own profile (name, tagline)
+// update own profile (name, tagline, email)
 app.post('/api/auth/profile', authOptional, authRequired, ah(async (req, res) => {
-  const { fullName, tagline } = req.body || {};
+  const { fullName, tagline, email } = req.body || {};
+  if (email !== undefined && email !== null && String(email).trim() !== req.user.email) {
+    const clean = String(email).trim().toLowerCase();
+    if (!/.+@.+\..+/.test(clean)) return res.status(400).json({ error: 'Enter a valid email address' });
+    const taken = await db.prepare('SELECT 1 FROM users WHERE email = ? AND id <> ?').get(clean, req.user.id);
+    if (taken) return res.status(409).json({ error: 'That email is already in use' });
+    await db.prepare('UPDATE users SET email = ? WHERE id = ?').run(clean, req.user.id);
+  }
   await db.prepare('UPDATE users SET full_name = COALESCE(?,full_name), tagline = COALESCE(?,tagline) WHERE id = ?')
     .run(fullName || null, tagline || null, req.user.id);
   const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);

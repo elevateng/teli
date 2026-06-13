@@ -1,59 +1,29 @@
 import { useEffect, useState } from 'react';
 import { Download, X, Share, Plus } from 'lucide-react';
 import { BookMark } from './ui';
+import { useInstall } from './pwa';
 
 const DISMISS_KEY = 'teli-install-dismissed';
 
-type BIPEvent = Event & { prompt: () => void; userChoice: Promise<{ outcome: string }> };
-
-function isStandalone() {
-  return window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone === true;
-}
-function isIos() {
-  return /iphone|ipad|ipod/i.test(navigator.userAgent) && !(window as any).MSStream;
-}
-
 export default function InstallPrompt() {
-  const [deferred, setDeferred] = useState<BIPEvent | null>(null);
+  const { canInstall, isStandalone, isIos, promptInstall } = useInstall();
   const [show, setShow] = useState(false);
   const [iosHelp, setIosHelp] = useState(false);
 
   useEffect(() => {
-    if (isStandalone() || localStorage.getItem(DISMISS_KEY)) return;
-
-    const onPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferred(e as BIPEvent);
-      setShow(true);
-    };
-    window.addEventListener('beforeinstallprompt', onPrompt);
-
-    // iOS Safari never fires beforeinstallprompt — surface a manual hint instead.
+    if (isStandalone || localStorage.getItem(DISMISS_KEY)) return;
+    if (canInstall) setShow(true);
     let t: ReturnType<typeof setTimeout> | undefined;
-    if (isIos()) t = setTimeout(() => setShow(true), 2000);
-
-    const onInstalled = () => { setShow(false); localStorage.setItem(DISMISS_KEY, '1'); };
-    window.addEventListener('appinstalled', onInstalled);
-
-    return () => {
-      window.removeEventListener('beforeinstallprompt', onPrompt);
-      window.removeEventListener('appinstalled', onInstalled);
-      if (t) clearTimeout(t);
-    };
-  }, []);
+    if (isIos) t = setTimeout(() => setShow(true), 2000);
+    return () => { if (t) clearTimeout(t); };
+  }, [canInstall, isStandalone, isIos]);
 
   const dismiss = () => { setShow(false); setIosHelp(false); localStorage.setItem(DISMISS_KEY, '1'); };
 
   const install = async () => {
-    if (deferred) {
-      deferred.prompt();
-      await deferred.userChoice;
-      setDeferred(null);
-      setShow(false);
-      localStorage.setItem(DISMISS_KEY, '1');
-    } else if (isIos()) {
-      setIosHelp(true);
-    }
+    const r = await promptInstall();
+    if (r === 'unavailable' && isIos) { setIosHelp(true); return; }
+    setShow(false); localStorage.setItem(DISMISS_KEY, '1');
   };
 
   if (!show) return null;

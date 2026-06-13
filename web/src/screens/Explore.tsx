@@ -37,6 +37,12 @@ export default function Explore() {
 
   const sortLabel = SORTS.find((s) => s.k === sort)?.label || 'Most popular';
 
+  const toggleSave = async (c: CourseCard, e: React.MouseEvent | React.KeyboardEvent) => {
+    e.stopPropagation();
+    const { saved } = await api.post<{ saved: boolean }>(`/courses/${c.id}/save`);
+    setCourses((cs) => (cs || []).map((x) => (x.id === c.id ? { ...x, saved } : x)));
+  };
+
   return (
     <div className="pb-6">
       <StatusBar />
@@ -93,14 +99,17 @@ export default function Explore() {
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-2">
                 <span className="text-[11px] font-bold uppercase tracking-wide text-navy/70">{c.category}</span>
-                <Bookmark size={20} className={c.saved ? 'text-brand fill-brand' : 'text-navy/40'} />
+                <span role="button" tabIndex={0} aria-label={c.saved ? 'Unsave' : 'Save'} onClick={(e) => toggleSave(c, e)}
+                  className="p-1 -m-1 cursor-pointer">
+                  <Bookmark size={20} className={c.saved ? 'text-brand fill-brand' : 'text-navy/40'} />
+                </span>
               </div>
               <h3 className="font-extrabold text-navy leading-tight mt-0.5">{c.title}</h3>
               <p className="text-sm text-sub mt-1 line-clamp-2">{c.summary}</p>
               <div className="flex items-center gap-4 mt-3 text-xs text-sub">
                 <span className="flex items-center gap-1"><Clock size={14} /> {c.duration}</span>
                 <span className="flex items-center gap-1"><SignalHigh size={14} /> {c.level}</span>
-                <span className="ml-auto font-extrabold text-navy text-base">{naira(c.price)}</span>
+                <span className="ml-auto font-extrabold text-navy text-base">{c.price === 0 ? 'Free' : naira(c.price)}</span>
               </div>
             </div>
           </button>

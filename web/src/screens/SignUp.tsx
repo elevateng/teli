@@ -16,6 +16,7 @@ export default function SignUp() {
   const [confirm, setConfirm] = useState('');
   const [show, setShow] = useState(false);
   const [show2, setShow2] = useState(false);
+  const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const ref = params.get('ref') || sessionStorage.getItem('teli_ref') || '';
@@ -27,6 +28,7 @@ export default function SignUp() {
     e.preventDefault();
     setError('');
     if (password !== confirm) return setError('Passwords do not match.');
+    if (!agreed) return setError('Please accept the Terms & Conditions to continue.');
     setBusy(true);
     try { const u = await register(`${firstName.trim()} ${lastName.trim()}`.trim(), email, password, ref || undefined); sessionStorage.removeItem('teli_ref'); nav(u.role === 'learner' ? '/home' : '/admin', { replace: true }); }
     catch (err: any) { setError(err.message); }
@@ -90,11 +92,19 @@ export default function SignUp() {
           </Field>
         </div>
 
-        <button disabled={busy} className="btn-primary w-full mt-6 text-[17px]">
+        <label className="flex items-start gap-2.5 mt-5 cursor-pointer">
+          <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-0.5 w-5 h-5 accent-brand shrink-0" />
+          <span className="text-sm text-sub leading-snug">
+            I agree to TELI’s <Link to="/legal/terms" className="text-brand font-semibold">Terms &amp; Conditions</Link> and <Link to="/legal/privacy" className="text-brand font-semibold">Privacy Policy</Link>.
+          </span>
+        </label>
+
+        <button disabled={busy || !agreed} className="btn-primary w-full mt-5 text-[17px] disabled:opacity-50">
           {busy ? 'Creating…' : 'Create Account'} <ArrowRight size={20} />
         </button>
 
         <GoogleButton />
+        <p className="text-center text-[11px] text-sub mt-2">By continuing with Google you also agree to our Terms &amp; Privacy Policy.</p>
 
         <p className="text-center text-sub mt-5">
           Already have an account? <Link to="/login" className="text-brand font-bold">Log in</Link>

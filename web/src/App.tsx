@@ -46,6 +46,7 @@ import Certificate from './screens/Certificate';
 import Community from './screens/Community';
 import TeamChat from './screens/TeamChat';
 import Messages from './screens/Messages';
+import Legal from './screens/Legal';
 
 // Centered app panel. On phones it's full-screen (with safe-area insets); on
 // laptops/desktop it's a comfortable centered column. `wide` is used for the
@@ -171,6 +172,11 @@ export default function App() {
     <Routes>
       {/* public splash — own full-bleed desktop landing */}
       <Route path="/" element={<Splash />} />
+
+      {/* public legal pages (reachable from signup) */}
+      <Route element={<FullLayout guard={false} />}>
+        <Route path="/legal/:doc" element={<Legal />} />
+      </Route>
 
       {/* auth — desktop split layout */}
       <Route element={<AuthShell />}>

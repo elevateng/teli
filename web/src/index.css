@@ -10,6 +10,13 @@ html, body, #root {
   height: 100%;
 }
 
+/* kill stray horizontal/elastic scroll on mobile (no grey overscroll gaps) */
+html, body, #root {
+  max-width: 100%;
+  overflow-x: hidden;
+  overscroll-behavior: none;
+}
+
 body {
   margin: 0;
   font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
@@ -17,6 +24,7 @@ body {
   background: #e9ecf3;
   color: #0F2147;
 }
+.dark body { background: #0a1018; color: #e6edf6; }
 
 /* hide scrollbars inside the phone for a native feel */
 .no-scrollbar::-webkit-scrollbar { display: none; }
@@ -69,3 +77,24 @@ body {
 .rich-content blockquote { border-left: 3px solid #F26419; padding-left: 1em; color: #475569; margin: 0.5em 0; font-style: italic; }
 .rich-content table { border-collapse: collapse; width: 100%; margin: 0.5em 0; }
 .rich-content th, .rich-content td { border: 1px solid rgba(0,0,0,0.12); padding: 0.4em 0.6em; text-align: left; }
+
+/* ---------------- dark mode ---------------- */
+/* The app uses literal utility colours; remap the common surfaces under .dark. */
+.dark .bg-white { background-color: #131c2e !important; }
+.dark .text-navy { color: #e6edf6 !important; }
+.dark .text-navy\/70 { color: rgba(230,237,246,0.7) !important; }
+.dark .text-navy\/60, .dark .text-navy\/50, .dark .text-navy\/40 { color: rgba(230,237,246,0.55) !important; }
+.dark .text-sub { color: #93a1b5 !important; }
+.dark .card { background-color: #131c2e !important; border-color: rgba(255,255,255,0.07) !important; box-shadow: 0 8px 30px -16px rgba(0,0,0,0.6) !important; }
+.dark .field { background-color: #1a2438 !important; border-color: rgba(255,255,255,0.12) !important; color: #e6edf6 !important; }
+.dark .field::placeholder { color: #6b7689 !important; }
+.dark input, .dark textarea, .dark select { color: #e6edf6; }
+.dark .bg-navy-50, .dark .bg-navy-50\/60, .dark .bg-navy-50\/40 { background-color: #0a1018 !important; }
+.dark .bg-brand-50 { background-color: rgba(242,100,25,0.16) !important; }
+/* subtle black overlays → light overlays */
+.dark .bg-black\/\[0\.02\], .dark .bg-black\/\[0\.03\], .dark .bg-black\/\[0\.04\], .dark .bg-black\/\[0\.05\], .dark .bg-black\/\[0\.06\] { background-color: rgba(255,255,255,0.06) !important; }
+.dark .border-black\/\[0\.04\], .dark .border-black\/\[0\.05\], .dark .border-black\/\[0\.06\], .dark .border-black\/10, .dark .border-black\/15 { border-color: rgba(255,255,255,0.09) !important; }
+.dark .divide-black\/\[0\.05\] > * + * { border-color: rgba(255,255,255,0.08) !important; }
+/* the sidebar / borders */
+.dark aside { background-color: #0d1524 !important; }
+.dark .rich-content code { background: rgba(255,255,255,0.1); }

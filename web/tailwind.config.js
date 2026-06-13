@@ -1,6 +1,7 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
@@ -28,7 +29,12 @@ export default {
         soft: '0 2px 14px -6px rgba(15, 33, 71, 0.12)',
       },
       borderRadius: {
-        xl2: '1.25rem',
+        // slightly less rounded across the whole app
+        lg: '0.45rem',
+        xl: '0.6rem',
+        '2xl': '0.8rem',
+        '3xl': '1.1rem',
+        xl2: '1.1rem',
       },
     },
   },
