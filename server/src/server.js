@@ -372,12 +372,15 @@ app.post('/api/auth/register', ah(async (req, res) => {
   const exists = await db.prepare('SELECT id FROM users WHERE email = ?').get(String(email).toLowerCase());
   if (exists) return res.status(409).json({ error: 'An account with this email already exists' });
   const hash = bcrypt.hashSync(String(password), 10);
-  // email signups start unverified — they confirm a code emailed to them
-  const info = await db.prepare('INSERT INTO users (full_name,email,password,email_verified) VALUES (?,?,?,0)')
-    .run(fullName, String(email).toLowerCase(), hash);
+  // Require email verification only when email is actually configured, so a broken
+  // mail setup can never lock new users out (they'd never receive the code).
+  const verified = emailEnabled ? 0 : 1;
+  const info = await db.prepare('INSERT INTO users (full_name,email,password,email_verified) VALUES (?,?,?,?)')
+    .run(fullName, String(email).toLowerCase(), hash, verified);
   const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid);
   await applyReferral(req.body?.ref, user);
-  await sendVerification(user);
+  if (emailEnabled) await sendVerification(user);
+  else await sendWelcome(user); // no email gateway → skip verification, welcome straight away
   res.json({ token: sign(user), user: publicUser(user) });
 }));
 
@@ -423,6 +426,7 @@ app.get('/api/config', (_req, res) => {
     flutterwaveEnabled,
     googleClientId: config.GOOGLE_CLIENT_ID || null,
     googleEnabled,
+    emailEnabled,
   });
 });
 
