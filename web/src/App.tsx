@@ -47,6 +47,7 @@ import Community from './screens/Community';
 import TeamChat from './screens/TeamChat';
 import Messages from './screens/Messages';
 import Legal from './screens/Legal';
+import VerifyEmail from './screens/VerifyEmail';
 
 // Centered app panel. On phones it's full-screen (with safe-area insets); on
 // laptops/desktop it's a comfortable centered column. `wide` is used for the
@@ -101,6 +102,8 @@ function RequireAuth({ children, roles }: { children: ReactNode; roles?: Role[] 
   if (!user) return <Navigate to="/" replace state={{ from: loc.pathname }} />;
   // Invited users must set their own password before doing anything else.
   if (user.mustChangePassword && loc.pathname !== '/set-password') return <Navigate to="/set-password" replace />;
+  // Email signups must verify their email before using the app.
+  if (user.emailVerified === false && loc.pathname !== '/verify-email') return <Navigate to="/verify-email" replace />;
   if (roles && !roles.includes(user.role)) return <Navigate to={homeForRole(user)} replace />;
   return <>{children}</>;
 }
@@ -183,6 +186,7 @@ export default function App() {
         <Route path="/signup" element={<SignUp />} />
         <Route path="/login" element={<Login />} />
         <Route path="/reset" element={<ResetPassword />} />
+        <Route path="/verify-email" element={<VerifyEmail />} />
       </Route>
 
       {/* tabs */}

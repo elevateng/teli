@@ -23,7 +23,7 @@ export default function SideNav({ items }: { items: NavItem[] }) {
     `flex items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-3'} py-2.5 rounded-xl font-semibold text-[15px] ${isActive ? 'bg-brand-50 text-brand' : 'text-navy hover:bg-black/[0.04]'}`;
 
   const item = (to: string, label: string, Icon: any, end?: boolean) => (
-    <NavLink key={to} to={to} end={end} className={link} title={collapsed ? label : undefined}>
+    <NavLink key={to} to={to} end={end} data-tour={to} className={link} title={collapsed ? label : undefined}>
       <Icon size={20} /> {!collapsed && <span>{label}</span>}
     </NavLink>
   );

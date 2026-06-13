@@ -4,12 +4,26 @@ import { Menu, Play, ChevronRight, Clock } from 'lucide-react';
 import { api, CourseCard, Dashboard, LearningCard } from '../api';
 import { StatusBar, Wordmark, CourseThumb, ProgressBar, Spinner } from '../components/ui';
 import Bell from '../components/Bell';
+import Tour, { TourStep } from '../components/Tour';
+import { useAuth } from '../auth';
+
+const TOUR_KEY = 'teli-tour-done';
+const LEARNER_TOUR: TourStep[] = [
+  { title: 'Welcome to TELI 🎉', text: 'Here’s a 30-second tour so you know where everything is.' },
+  { selector: '[data-tour="/explore"]', title: 'Explore courses', text: 'Browse the catalog and enrol in courses right here.' },
+  { selector: '[data-tour="/learning"]', title: 'My Learning', text: 'Track your progress, pick up where you left off, and find your saved courses.' },
+  { selector: '[data-tour="/community"]', title: 'Community', text: 'Connect, ask questions and share wins with others on your courses.' },
+  { selector: '[data-tour="/profile"]', title: 'You & rewards', text: 'Your points, streak, badges, referrals and settings all live here.' },
+  { title: 'You’re all set! 🚀', text: 'Tap Explore to enrol in your first course. Enjoy your learning journey!' },
+];
 
 export default function Home() {
   const nav = useNavigate();
+  const { user } = useAuth();
   const [dash, setDash] = useState<Dashboard | null>(null);
   const [learning, setLearning] = useState<{ inProgress: LearningCard[] }>({ inProgress: [] });
   const [explore, setExplore] = useState<CourseCard[]>([]);
+  const [tour, setTour] = useState(false);
 
   useEffect(() => {
     api.get<Dashboard>('/me/dashboard').then(setDash);
@@ -17,11 +31,21 @@ export default function Home() {
     api.get<{ courses: CourseCard[] }>('/courses').then((d) => setExplore(d.courses));
   }, []);
 
+  // first-run onboarding tour for learners
+  useEffect(() => {
+    if (user?.role === 'learner' && !localStorage.getItem(TOUR_KEY)) {
+      const t = setTimeout(() => setTour(true), 600);
+      return () => clearTimeout(t);
+    }
+  }, [user]);
+  const endTour = () => { localStorage.setItem(TOUR_KEY, '1'); setTour(false); };
+
   if (!dash) return <Spinner />;
   const cont = learning.inProgress[0];
 
   return (
     <div className="pb-6">
+      {tour && <Tour steps={LEARNER_TOUR} onDone={endTour} />}
       <StatusBar />
       <div className="flex items-center justify-between px-5 pt-2">
         <button onClick={() => nav('/explore')}><Menu size={26} className="text-navy" /></button>

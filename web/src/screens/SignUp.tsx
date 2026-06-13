@@ -30,7 +30,7 @@ export default function SignUp() {
     if (password !== confirm) return setError('Passwords do not match.');
     if (!agreed) return setError('Please accept the Terms & Conditions to continue.');
     setBusy(true);
-    try { const u = await register(`${firstName.trim()} ${lastName.trim()}`.trim(), email, password, ref || undefined); sessionStorage.removeItem('teli_ref'); nav(u.role === 'learner' ? '/home' : '/admin', { replace: true }); }
+    try { const u = await register(`${firstName.trim()} ${lastName.trim()}`.trim(), email, password, ref || undefined); sessionStorage.removeItem('teli_ref'); nav(u.emailVerified === false ? '/verify-email' : (u.role === 'learner' ? '/home' : '/admin'), { replace: true }); }
     catch (err: any) { setError(err.message); }
     finally { setBusy(false); }
   };

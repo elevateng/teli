@@ -65,7 +65,7 @@ export async function uploadFile(file: File): Promise<string> {
 export type Role = 'learner' | 'admin' | 'super_admin';
 export interface User {
   id: number; fullName: string; email: string; tagline: string; role: Role;
-  points: number; streakDays: number; avatar?: string | null; mustChangePassword?: boolean;
+  points: number; streakDays: number; avatar?: string | null; mustChangePassword?: boolean; emailVerified?: boolean;
 }
 export interface AccessCode { id: number; code: string; email: string | null; maxUses: number; usedCount: number; active: boolean; createdAt: string; }
 export interface Reward { code: string; kind: 'percent' | 'fixed'; value: number; label: string | null; used: boolean; active: boolean; }

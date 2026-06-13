@@ -366,6 +366,10 @@ CREATE TABLE IF NOT EXISTS submissions (
   await addColumn('users', 'referral_points', 'referral_points INTEGER NOT NULL DEFAULT 0');
   await addColumn('users', 'referred_by', 'referred_by INTEGER'); // referrer user id
   await addColumn('users', 'last_active', 'last_active TEXT'); // YYYY-MM-DD of last learning activity (streaks)
+  // email verification (default 1 so existing/Google/invited users are not locked out; email signups set 0)
+  await addColumn('users', 'email_verified', 'email_verified INTEGER NOT NULL DEFAULT 1');
+  await addColumn('users', 'verify_code', 'verify_code TEXT');
+  await addColumn('users', 'verify_expires', 'verify_expires TEXT');
   await addColumn('courses', 'visibility', "visibility TEXT NOT NULL DEFAULT 'public'"); // public | private
   await addColumn('courses', 'created_by', 'created_by INTEGER'); // owner (admin who created it)
   await addColumn('courses', 'image', 'image TEXT'); // course photo (data URL)

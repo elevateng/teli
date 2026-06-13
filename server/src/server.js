@@ -54,8 +54,32 @@ function publicUser(u) {
     id: u.id, fullName: u.full_name, email: u.email, tagline: u.tagline,
     role: u.role || 'learner', points: u.points, streakDays: u.streak_days,
     avatar: u.avatar || null, mustChangePassword: !!u.must_change_password,
-    referralPoints: u.referral_points || 0,
+    referralPoints: u.referral_points || 0, emailVerified: u.email_verified !== 0,
   };
+}
+
+// 6-digit email verification code
+const gen6 = () => String(Math.floor(100000 + Math.random() * 900000));
+
+async function sendVerification(user) {
+  const code = gen6();
+  await db.prepare("UPDATE users SET verify_code = ?, verify_expires = datetime('now','+30 minutes') WHERE id = ?").run(code, user.id);
+  sendMail({
+    to: user.email, subject: `Your TELI verification code: ${code}`, title: 'Verify your email',
+    html: `<p>Hi ${firstName(user.full_name)},</p><p>Welcome to TELI! Use this code to verify your email address:</p>
+      <p style="font-size:30px;font-weight:800;letter-spacing:8px;color:#0F2147;background:#f3f4f6;display:inline-block;padding:12px 22px;border-radius:10px">${code}</p>
+      <p style="color:#5b6577;font-size:13px">This code expires in 30 minutes. If you didn’t create a TELI account, you can ignore this email.</p>` });
+  return code;
+}
+
+async function sendWelcome(user) {
+  await notify(user.id, 'system', 'Welcome to TELI 👋', 'Your account is ready. Explore courses and start learning.', '/explore');
+  sendMail({
+    to: user.email, subject: 'Welcome to TELI 🎓', title: `Welcome, ${firstName(user.full_name)}!`,
+    html: `<p>Hi ${firstName(user.full_name)},</p><p>Welcome aboard — I’m Ayo from TELI. Your account is ready, and I’m excited to have you with us.</p>
+      <p>You can now explore courses, learn at your own pace, join your course communities and earn certificates.</p>
+      <p><a href="${config.APP_URL}/explore" style="background:#F26419;color:#fff;padding:12px 20px;border-radius:10px;text-decoration:none;display:inline-block">Browse courses</a></p>
+      <p style="color:#5b6577;font-size:13px">Warmly,<br/>Ayo — TELI (The Elevate Learning Institute), an initiative of Elevate Development Foundation.</p>` });
 }
 
 const authOptional = ah(async (req, _res, next) => {
@@ -348,14 +372,35 @@ app.post('/api/auth/register', ah(async (req, res) => {
   const exists = await db.prepare('SELECT id FROM users WHERE email = ?').get(String(email).toLowerCase());
   if (exists) return res.status(409).json({ error: 'An account with this email already exists' });
   const hash = bcrypt.hashSync(String(password), 10);
-  const info = await db.prepare('INSERT INTO users (full_name,email,password) VALUES (?,?,?)')
+  // email signups start unverified — they confirm a code emailed to them
+  const info = await db.prepare('INSERT INTO users (full_name,email,password,email_verified) VALUES (?,?,?,0)')
     .run(fullName, String(email).toLowerCase(), hash);
   const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid);
   await applyReferral(req.body?.ref, user);
-  await notify(user.id, 'system', 'Welcome to TELI 👋', 'Your account is ready. Explore courses and start learning.', '/explore');
-  sendMail({ to: user.email, subject: 'Welcome to TELI 🎓', title: `Welcome, ${firstName(fullName)}!`,
-    html: `<p>Hi ${firstName(fullName)},</p><p>Your TELI account is ready. You can now explore courses, learn at your own pace, and earn certificates.</p><p><a href="${config.APP_URL}/explore" style="background:#F26419;color:#fff;padding:12px 20px;border-radius:10px;text-decoration:none;display:inline-block">Browse courses</a></p><p style="color:#5b6577;font-size:13px">Practical training for social-impact professionals — by Elevate Development Foundation.</p>` });
+  await sendVerification(user);
   res.json({ token: sign(user), user: publicUser(user) });
+}));
+
+// verify the emailed 6-digit code; on success, send the welcome email
+app.post('/api/auth/verify-email', authOptional, authRequired, ah(async (req, res) => {
+  const u = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+  if (u.email_verified) return res.json({ user: publicUser(u) });
+  const code = String(req.body?.code || '').trim();
+  const fresh = await db.prepare("SELECT 1 FROM users WHERE id = ? AND verify_code = ? AND verify_expires > datetime('now')").get(u.id, code);
+  if (!code || !fresh) return res.status(400).json({ error: 'That code is invalid or has expired. Request a new one.' });
+  await db.prepare('UPDATE users SET email_verified = 1, verify_code = NULL, verify_expires = NULL WHERE id = ?').run(u.id);
+  await sendWelcome(u);
+  await audit(u, 'email.verified', u.email, 'user', u.id);
+  const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(u.id);
+  res.json({ user: publicUser(user) });
+}));
+
+// resend a fresh verification code
+app.post('/api/auth/resend-verification', authOptional, authRequired, ah(async (req, res) => {
+  const u = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+  if (u.email_verified) return res.json({ ok: true });
+  await sendVerification(u);
+  res.json({ ok: true });
 }));
 
 app.post('/api/auth/login', ah(async (req, res) => {
@@ -401,6 +446,7 @@ app.post('/api/auth/google', ah(async (req, res) => {
     user = await db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid);
     await audit(user, 'signup.google', email, 'user', user.id);
     await applyReferral(req.body?.ref, user);
+    await sendWelcome(user); // Google emails are already verified
   } else if (!user.google_id) {
     await db.prepare('UPDATE users SET google_id = ? WHERE id = ?').run(sub, user.id);
   }

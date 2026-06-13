@@ -6,7 +6,7 @@ export default function BottomNav() {
     <nav className="shrink-0 bg-white border-t border-black/[0.06] px-2 pt-2 lg:hidden" style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0.75rem)' }}>
       <div className="flex items-center justify-around">
         {learnerNav.map(({ to, label, icon: Icon }) => (
-          <NavLink key={to} to={to}
+          <NavLink key={to} to={to} data-tour={to}
             className={({ isActive }) =>
               `flex flex-col items-center gap-1 px-2 py-1 rounded-xl ${isActive ? 'text-brand' : 'text-sub'}`
             }>
