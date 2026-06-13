@@ -4,7 +4,7 @@ import { useAuth, homeForRole } from './auth';
 import { Role } from './api';
 import BottomNav from './components/BottomNav';
 import AdminNav from './components/AdminNav';
-import SideNav from './components/SideNav';
+import SideNav, { RoleSideNav } from './components/SideNav';
 import { learnerNav, adminNav, NavItem } from './components/nav-items';
 import { Spinner, BookMark } from './components/ui';
 
@@ -138,23 +138,37 @@ function AuthShell() {
 }
 
 function FullLayout({ guard = true, roles, wide = true }: { guard?: boolean; roles?: Role[]; wide?: boolean }) {
-  const content = (
-    <Phone wide={wide}>
-      <div className="flex-1 overflow-y-auto no-scrollbar flex flex-col">
-        <Outlet />
+  // Public (unguarded) screens: no nav.
+  if (!guard) {
+    return (
+      <Phone wide={wide}>
+        <div className="flex-1 overflow-y-auto no-scrollbar flex flex-col"><Outlet /></div>
+      </Phone>
+    );
+  }
+  // Authed full-screen routes keep the (collapsible) sidebar on desktop so the
+  // nav never disappears; mobile stays immersive (sidebar hidden, no bottom nav).
+  return (
+    <RequireAuth roles={roles}>
+      <div className="h-[100dvh] w-full flex bg-white">
+        <RoleSideNav />
+        <div className="flex-1 flex flex-col h-[100dvh] overflow-hidden min-w-0">
+          <div className="flex-1 overflow-y-auto no-scrollbar flex flex-col">
+            <div className="mx-auto w-full max-w-[1100px] flex-1 flex flex-col">
+              <Outlet />
+            </div>
+          </div>
+        </div>
       </div>
-    </Phone>
+    </RequireAuth>
   );
-  return guard ? <RequireAuth roles={roles}>{content}</RequireAuth> : content;
 }
 
 export default function App() {
   return (
     <Routes>
-      {/* public splash */}
-      <Route element={<FullLayout guard={false} wide={false} />}>
-        <Route path="/" element={<Splash />} />
-      </Route>
+      {/* public splash — own full-bleed desktop landing */}
+      <Route path="/" element={<Splash />} />
 
       {/* auth — desktop split layout */}
       <Route element={<AuthShell />}>

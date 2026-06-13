@@ -4,7 +4,7 @@ import {
   ChevronLeft, Share2, Bookmark, Clock, SignalHigh, PlayCircle, Star, CheckCircle2,
   ChevronDown, FileText, HelpCircle, Award, Play, Lock, ArrowRight, Circle, Users, Crown, ClipboardList,
 } from 'lucide-react';
-import { api, CourseDetail as CD, LessonNode, naira, shareOrCopy } from '../api';
+import { api, CourseDetail as CD, LessonNode, naira, pctOff, shareOrCopy } from '../api';
 import { CourseThumb, ProgressBar, Spinner, Wordmark, Avatar } from '../components/ui';
 import { LearnerAssignments } from '../components/Assignments';
 
@@ -154,9 +154,13 @@ export default function CourseDetail() {
           <div className="flex items-center gap-4">
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-2xl font-extrabold text-navy">{naira(course.price)}</span>
-                {course.oldPrice && <span className="text-sub line-through text-sm">{naira(course.oldPrice)}</span>}
-                {course.discount && <span className="chip bg-brand text-white">{course.discount}</span>}
+                <span className="text-2xl font-extrabold text-navy">{course.price === 0 ? 'Free' : naira(course.price)}</span>
+                {course.oldPrice && course.oldPrice > course.price && <span className="text-sub line-through text-sm">{naira(course.oldPrice)}</span>}
+                {course.price === 0 && course.oldPrice ? (
+                  <span className="chip bg-emerald-500 text-white">100% OFF</span>
+                ) : pctOff(course.oldPrice, course.price) != null && (
+                  <span className="chip bg-brand text-white">{pctOff(course.oldPrice, course.price)}% OFF</span>
+                )}
               </div>
               <p className="text-xs text-sub mt-1">7-day money-back guarantee</p>
             </div>

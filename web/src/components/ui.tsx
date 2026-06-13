@@ -1,5 +1,6 @@
 import { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth, homeForRole } from '../auth';
 import {
   Target, Megaphone, Handshake, Sprout, FileText, Landmark, Shield, BarChart3,
   Heart, Users, GraduationCap, Star, Crosshair, ChevronLeft,
@@ -78,16 +79,19 @@ export function TopBar({ title, subtitle, right, onBack }: { title?: ReactNode; 
   );
 }
 
-// ---------- brand wordmark ----------
+// ---------- brand wordmark (clicking it goes to the user's home) ----------
 export function Wordmark({ withTagline = false, className = '' }: { withTagline?: boolean; className?: string }) {
+  const nav = useNavigate();
+  const { user } = useAuth();
   return (
-    <div className={`flex items-center gap-2 ${className}`}>
+    <button type="button" onClick={() => nav(user ? homeForRole(user) : '/')} aria-label="Go to home"
+      className={`flex items-center gap-2 ${className}`}>
       <BookMark size={32} />
-      <div className="leading-none">
+      <div className="leading-none text-left">
         <span className="font-extrabold tracking-tight text-navy text-[26px]">TELI</span>
         {withTagline && <div className="text-[9px] font-bold tracking-wide text-navy/70 mt-1">THE ELEVATE<br />LEARNING INSTITUTE</div>}
       </div>
-    </div>
+    </button>
   );
 }
 

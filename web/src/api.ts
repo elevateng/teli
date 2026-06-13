@@ -206,6 +206,12 @@ export interface CommunityComment {
 
 export const naira = (n: number) => '₦' + n.toLocaleString('en-NG');
 
+// Real discount percentage derived from the actual prices (not a stored label).
+export function pctOff(oldPrice: number | null | undefined, price: number): number | null {
+  if (!oldPrice || oldPrice <= price) return null;
+  return Math.round(((oldPrice - price) / oldPrice) * 100);
+}
+
 // Friendly relative time, e.g. "3h", "2d".
 export function timeAgo(iso: string): string {
   const then = new Date(iso.includes('T') || iso.includes(' ') ? iso.replace(' ', 'T') + (iso.endsWith('Z') ? '' : 'Z') : iso).getTime();

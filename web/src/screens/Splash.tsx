@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, ShieldCheck } from 'lucide-react';
-import { StatusBar, Wordmark } from '../components/ui';
+import { BookMark } from '../components/ui';
 import { useAuth, homeForRole } from '../auth';
 import { useEffect } from 'react';
 
@@ -10,28 +10,30 @@ export default function Splash() {
   useEffect(() => { if (user) nav(homeForRole(user), { replace: true }); }, [user]);
 
   return (
-    <div className="flex flex-col h-full">
-      <StatusBar />
-      <div className="flex-1 px-7 pt-6 relative overflow-hidden">
-        <Wordmark withTagline className="mb-12" />
-
-        <h1 className="text-[44px] leading-[1.05] font-extrabold text-navy">
+    <div className="min-h-[100dvh] w-full flex flex-col lg:flex-row bg-white">
+      {/* brand hero */}
+      <div className="relative overflow-hidden flex-1 bg-navy text-white px-7 pb-16 lg:px-16 lg:flex lg:flex-col lg:justify-center"
+        style={{ paddingTop: 'max(env(safe-area-inset-top), 3rem)' }}>
+        <div className="relative z-10 flex items-center gap-2.5 mb-10">
+          <BookMark size={40} />
+          <span className="text-2xl font-extrabold tracking-tight">TELI</span>
+        </div>
+        <h1 className="relative z-10 text-[44px] lg:text-[64px] leading-[1.04] font-extrabold">
           Learn.<br />Lead.<br /><span className="text-brand">Elevate Impact.</span>
         </h1>
-        <div className="w-14 h-1.5 bg-brand rounded-full my-6" />
-        <p className="text-sub text-[15px] max-w-[15rem] leading-relaxed">
+        <div className="relative z-10 w-14 h-1.5 bg-brand rounded-full my-6" />
+        <p className="relative z-10 text-white/70 text-base lg:text-lg max-w-md leading-relaxed">
           Practical training for social impact professionals and changemakers in Nigeria.
         </p>
-
+        <p className="relative z-10 hidden lg:block text-white/50 text-sm mt-10">An initiative of Elevate Development Foundation</p>
         {/* decorative shapes */}
-        <div className="absolute right-0 top-40 w-24 h-40 bg-brand-50 rounded-l-3xl" />
-        <div className="absolute right-8 bottom-24 w-28 h-28 bg-brand rounded-full" />
-        <div className="absolute -left-6 bottom-0 w-40 h-40 bg-navy rounded-tr-[5rem]" />
-        <div className="absolute left-36 bottom-0 w-32 h-32 bg-brand rounded-t-[5rem]" />
-        <div className="absolute right-0 bottom-0 w-28 h-28 bg-navy rounded-tl-[4rem]" />
+        <div className="absolute -bottom-24 -right-24 w-96 h-96 rounded-full bg-brand/20" />
+        <div className="absolute top-1/4 -right-12 w-44 h-44 rounded-full bg-white/[0.04]" />
       </div>
 
-      <div className="px-7 pb-7 space-y-3 bg-white relative z-10">
+      {/* CTA panel */}
+      <div className="lg:w-[40%] xl:w-[34%] flex flex-col justify-center px-7 py-8 lg:px-14 gap-3 bg-white">
+        <h2 className="hidden lg:block text-2xl font-extrabold text-navy mb-2">Start learning today</h2>
         <button onClick={() => nav('/signup')} className="btn-primary w-full text-[17px]">
           Get Started <ArrowRight size={20} />
         </button>
