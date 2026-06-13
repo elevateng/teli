@@ -90,8 +90,15 @@ export interface CourseCard {
   visibility?: 'public' | 'private'; published?: boolean;
 }
 export interface Instructor { name: string; title: string; bio: string; avatar: string | null; }
-export interface GroupMember { userId: number; name: string; avatar: string | null; leader: boolean; }
-export interface CourseGroup { id: number; name: string; courseId?: number; members: GroupMember[]; }
+export interface GroupMember { userId: number; name: string; avatar: string | null; leader: boolean; role?: string; roleLabel?: string; }
+export interface CourseGroup { id: number; name: string; courseId?: number; courseTitle?: string; courseSlug?: string; members: GroupMember[]; }
+
+// team chat + direct messages
+export interface ChatAuthor { id: number; name: string; avatar: string | null; role: Role; staff: boolean; roleLabel?: string; leader?: boolean; }
+export interface GroupMessage { id: number; parentId: number | null; body: string; createdAt: string; author: ChatAuthor | null; replies?: GroupMessage[]; }
+export interface MyTeam { id: number; name: string; courseTitle: string; courseSlug: string; }
+export interface DMConversation { user: ChatAuthor | null; last: { body: string; createdAt: string; mine: boolean }; unread: number; }
+export interface DMMessage { id: number; body: string; createdAt: string; mine: boolean; }
 
 export type AssignmentFormat = 'text' | 'file' | 'link';
 export interface Submission {

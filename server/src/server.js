@@ -815,13 +815,14 @@ async function loadCourseOr404(idOrSlug) {
 }
 async function groupView(g) {
   const members = await db.prepare(`
-    SELECT gm.user_id, gm.is_leader, u.full_name, u.avatar
+    SELECT gm.user_id, gm.is_leader, u.full_name, u.avatar, u.role
     FROM group_members gm JOIN users u ON u.id = gm.user_id
     WHERE gm.group_id = ? ORDER BY gm.is_leader DESC, u.full_name
   `).all(g.id);
   return {
     id: g.id, name: g.name, courseId: g.course_id,
-    members: members.map((m) => ({ userId: m.user_id, name: m.full_name, avatar: m.avatar || null, leader: !!m.is_leader })),
+    members: members.map((m) => ({ userId: m.user_id, name: m.full_name, avatar: m.avatar || null, leader: !!m.is_leader,
+      role: m.role, roleLabel: ROLE_LABEL[m.role] || 'Learner' })),
   };
 }
 
@@ -898,6 +899,138 @@ app.post('/api/admin/groups/:gid/leader', authOptional, requireRole('admin', 'su
   await db.prepare('UPDATE group_members SET is_leader = ? WHERE group_id = ? AND user_id = ?').run(isLeader, ctx.g.id, userId);
   if (isLeader) await notify(userId, 'group', `You're now a group leader`, `${ctx.course.title}: ${ctx.g.name}`, `/course/${ctx.course.slug}`);
   res.json({ group: await groupView(ctx.g) });
+}));
+
+// ----------------------------- team group chat -----------------------------
+// Access: team members, or staff who manage the course (they can read/post and
+// optionally join). Returns context or sends an error response.
+async function groupChatCtx(req, res) {
+  const g = await db.prepare('SELECT * FROM course_groups WHERE id = ?').get(req.params.gid);
+  if (!g) { res.status(404).json({ error: 'Team not found' }); return null; }
+  const course = await db.prepare('SELECT * FROM courses WHERE id = ?').get(g.course_id);
+  const member = await db.prepare('SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?').get(g.id, req.user.id);
+  const canManage = canManageCourse(req.user, course);
+  if (!member && !canManage) { res.status(403).json({ error: 'You are not part of this team' }); return null; }
+  return { g, course, isMember: !!member, canManage };
+}
+async function leaderSet(groupId) {
+  const rows = await db.prepare('SELECT user_id FROM group_members WHERE group_id = ? AND is_leader = 1').all(groupId);
+  return new Set(rows.map((r) => r.user_id));
+}
+async function groupMsgView(m, leaders) {
+  const a = await db.prepare('SELECT id, full_name, avatar, role FROM users WHERE id = ?').get(m.user_id);
+  const author = authorView(a);
+  if (author) author.leader = leaders.has(m.user_id);
+  return { id: m.id, parentId: m.parent_id || null, body: m.body, createdAt: m.created_at, author };
+}
+
+// group info + roster + my membership
+app.get('/api/groups/:gid', authOptional, authRequired, ah(async (req, res) => {
+  const ctx = await groupChatCtx(req, res); if (!ctx) return;
+  const view = await groupView(ctx.g);
+  res.json({ group: { ...view, courseTitle: ctx.course.title, courseSlug: ctx.course.slug }, isMember: ctx.isMember, canManage: ctx.canManage });
+}));
+
+// staff self-join a team they manage
+app.post('/api/groups/:gid/join', authOptional, requireRole('admin', 'super_admin'), ah(async (req, res) => {
+  const ctx = await groupChatCtx(req, res); if (!ctx) return;
+  await db.prepare('INSERT OR IGNORE INTO group_members (group_id, user_id) VALUES (?,?)').run(ctx.g.id, req.user.id);
+  res.json({ ok: true, group: await groupView(ctx.g) });
+}));
+
+// threaded messages (top-level posts, each with replies)
+app.get('/api/groups/:gid/messages', authOptional, authRequired, ah(async (req, res) => {
+  const ctx = await groupChatCtx(req, res); if (!ctx) return;
+  const leaders = await leaderSet(ctx.g.id);
+  const tops = await db.prepare('SELECT * FROM group_messages WHERE group_id = ? AND parent_id IS NULL ORDER BY id ASC').all(ctx.g.id);
+  const messages = [];
+  for (const t of tops) {
+    const view = await groupMsgView(t, leaders);
+    const reps = await db.prepare('SELECT * FROM group_messages WHERE parent_id = ? ORDER BY id ASC').all(t.id);
+    view.replies = [];
+    for (const r of reps) view.replies.push(await groupMsgView(r, leaders));
+    messages.push(view);
+  }
+  res.json({ messages });
+}));
+
+// post a message or threaded reply (parentId), with @mentions
+app.post('/api/groups/:gid/messages', authOptional, authRequired, ah(async (req, res) => {
+  const ctx = await groupChatCtx(req, res); if (!ctx) return;
+  const body = String(req.body?.body || '').trim();
+  if (!body) return res.status(400).json({ error: 'Write a message' });
+  const parentId = req.body?.parentId ? Number(req.body.parentId) : null;
+  const r = await db.prepare('INSERT INTO group_messages (group_id, user_id, parent_id, body) VALUES (?,?,?,?)')
+    .run(ctx.g.id, req.user.id, parentId, body);
+  await notifyMentions(req.body?.mentions, req.user, `${ctx.course.title}: ${ctx.g.name}`, `/team/${ctx.g.id}`);
+  if (parentId) {
+    const parent = await db.prepare('SELECT user_id FROM group_messages WHERE id = ?').get(parentId);
+    if (parent && parent.user_id !== req.user.id) {
+      await notify(parent.user_id, 'group', `${firstName(req.user.full_name)} replied in ${ctx.g.name}`, body.slice(0, 80), `/team/${ctx.g.id}`);
+    }
+  }
+  const leaders = await leaderSet(ctx.g.id);
+  const m = await db.prepare('SELECT * FROM group_messages WHERE id = ?').get(r.lastInsertRowid);
+  res.json({ message: await groupMsgView(m, leaders) });
+}));
+
+// the signed-in user's teams (entry points for chat)
+app.get('/api/me/teams', authOptional, authRequired, ah(async (req, res) => {
+  const rows = await db.prepare(`
+    SELECT cg.id, cg.name, c.title courseTitle, c.slug courseSlug FROM group_members gm
+    JOIN course_groups cg ON cg.id = gm.group_id JOIN courses c ON c.id = cg.course_id
+    WHERE gm.user_id = ? ORDER BY cg.id DESC
+  `).all(req.user.id);
+  res.json({ teams: rows.map((g) => ({ id: g.id, name: g.name, courseTitle: g.courseTitle, courseSlug: g.courseSlug })) });
+}));
+
+// --------------------------- direct messages (staff <-> learner) ---------------------------
+// A DM is allowed when at least one party is staff (no learner<->learner DMs).
+async function canDM(a, b) {
+  if (!a || !b || a.id === b.id) return false;
+  return isStaffRole(a.role) || isStaffRole(b.role);
+}
+
+// my conversations (latest message + unread count per other user)
+app.get('/api/dm', authOptional, authRequired, ah(async (req, res) => {
+  const me = req.user.id;
+  const rows = await db.prepare(`
+    SELECT CASE WHEN from_id = ? THEN to_id ELSE from_id END other, MAX(id) lastId
+    FROM dm_messages WHERE from_id = ? OR to_id = ? GROUP BY other ORDER BY lastId DESC
+  `).all(me, me, me);
+  const conversations = [];
+  for (const row of rows) {
+    const u = await db.prepare('SELECT id, full_name, avatar, role FROM users WHERE id = ?').get(row.other);
+    const last = await db.prepare('SELECT body, created_at, from_id FROM dm_messages WHERE id = ?').get(row.lastId);
+    const unread = (await db.prepare('SELECT COUNT(*) c FROM dm_messages WHERE from_id = ? AND to_id = ? AND read = 0').get(row.other, me)).c;
+    conversations.push({ user: authorView(u), last: { body: last.body, createdAt: last.created_at, mine: last.from_id === me }, unread });
+  }
+  res.json({ conversations });
+}));
+
+// thread with a specific user (marks their messages read)
+app.get('/api/dm/:userId', authOptional, authRequired, ah(async (req, res) => {
+  const me = req.user.id;
+  const other = await db.prepare('SELECT id, full_name, avatar, role FROM users WHERE id = ?').get(req.params.userId);
+  if (!other) return res.status(404).json({ error: 'User not found' });
+  if (!(await canDM(req.user, other))) return res.status(403).json({ error: 'You can only message staff or learners' });
+  await db.prepare('UPDATE dm_messages SET read = 1 WHERE from_id = ? AND to_id = ?').run(other.id, me);
+  const rows = await db.prepare(`
+    SELECT * FROM dm_messages WHERE (from_id = ? AND to_id = ?) OR (from_id = ? AND to_id = ?) ORDER BY id ASC
+  `).all(me, other.id, other.id, me);
+  res.json({ user: authorView(other), messages: rows.map((m) => ({ id: m.id, body: m.body, createdAt: m.created_at, mine: m.from_id === me })) });
+}));
+
+// send a DM
+app.post('/api/dm/:userId', authOptional, authRequired, ah(async (req, res) => {
+  const other = await db.prepare('SELECT id, full_name, avatar, role FROM users WHERE id = ?').get(req.params.userId);
+  if (!other) return res.status(404).json({ error: 'User not found' });
+  if (!(await canDM(req.user, other))) return res.status(403).json({ error: 'You can only message staff or learners' });
+  const body = String(req.body?.body || '').trim();
+  if (!body) return res.status(400).json({ error: 'Write a message' });
+  await db.prepare('INSERT INTO dm_messages (from_id, to_id, body) VALUES (?,?,?)').run(req.user.id, other.id, body);
+  await notify(other.id, 'dm', `New message from ${firstName(req.user.full_name)}`, body.slice(0, 80), `/messages/${req.user.id}`);
+  res.json({ ok: true });
 }));
 
 // ----------------------------- assignments -----------------------------

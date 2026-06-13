@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Pencil, Trash2, X, Search, ListTree, Eye, EyeOff, Award, Ticket, Copy, Check, Power, Image as ImageIcon, Tag, Users, Crown, UserPlus, ClipboardList, BarChart3 } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, Search, ListTree, Eye, EyeOff, Award, Ticket, Copy, Check, Power, Image as ImageIcon, Tag, Users, Crown, UserPlus, ClipboardList, BarChart3, MessageSquare } from 'lucide-react';
 import { api, CourseCard, CourseDetail, AccessCode, CourseGroup, resizeImage, naira } from '../../api';
 import { StatusBar, CourseThumb, Spinner, Avatar } from '../../components/ui';
 
@@ -387,6 +387,7 @@ function AccessCodes({ course, onClose }: { course: CourseCard; onClose: () => v
 }
 
 function GroupsManager({ course, onClose }: { course: CourseCard; onClose: () => void }) {
+  const gnav = useNavigate();
   const [groups, setGroups] = useState<CourseGroup[] | null>(null);
   const [learners, setLearners] = useState<{ id: number; name: string; avatar: string | null }[]>([]);
   const [name, setName] = useState('');
@@ -429,7 +430,10 @@ function GroupsManager({ course, onClose }: { course: CourseCard; onClose: () =>
                 <div key={g.id} className="card p-4">
                   <div className="flex items-center justify-between mb-2">
                     <span className="font-bold text-navy">{g.name}</span>
-                    <button onClick={() => delGroup(g.id)} className="text-red-500"><Trash2 size={15} /></button>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => gnav(`/team/${g.id}`)} className="text-brand font-bold text-xs flex items-center gap-1"><MessageSquare size={14} /> Chat</button>
+                      <button onClick={() => delGroup(g.id)} className="text-red-500"><Trash2 size={15} /></button>
+                    </div>
                   </div>
                   <div className="space-y-2">
                     {g.members.length === 0 && <p className="text-xs text-sub">No members yet.</p>}

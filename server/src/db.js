@@ -300,6 +300,22 @@ CREATE TABLE IF NOT EXISTS group_members (
   is_leader   INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (group_id, user_id)
 );
+CREATE TABLE IF NOT EXISTS group_messages (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  group_id    INTEGER NOT NULL REFERENCES course_groups(id) ON DELETE CASCADE,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  parent_id   INTEGER,                 -- thread reply target (a top-level message)
+  body        TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS dm_messages (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  from_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  to_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  body        TEXT NOT NULL,
+  read        INTEGER NOT NULL DEFAULT 0,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
 CREATE TABLE IF NOT EXISTS assignments (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   course_id     INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,

@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Bell, Settings, LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { Bell, Settings, LogOut, PanelLeftClose, PanelLeftOpen, MessageSquare } from 'lucide-react';
 import { NavItem, learnerNav, adminNav } from './nav-items';
 import { Wordmark, Avatar, BookMark } from './ui';
 import { useAuth } from '../auth';
@@ -43,6 +43,7 @@ export default function SideNav({ items }: { items: NavItem[] }) {
       <nav className="px-3 space-y-1 flex-1 overflow-y-auto no-scrollbar">
         {items.map(({ to, label, icon: Icon, end }) => item(to, label, Icon, end))}
         <div className="h-px bg-black/[0.06] my-2 mx-2" />
+        {item('/messages', 'Messages', MessageSquare)}
         {item('/notifications', 'Notifications', Bell)}
         {item('/settings', 'Settings', Settings)}
       </nav>

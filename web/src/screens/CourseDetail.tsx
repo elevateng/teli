@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ChevronLeft, Share2, Bookmark, Clock, SignalHigh, PlayCircle, Star, CheckCircle2,
-  ChevronDown, FileText, HelpCircle, Award, Play, Lock, ArrowRight, Circle, Users, Crown, ClipboardList,
+  ChevronDown, FileText, HelpCircle, Award, Play, Lock, ArrowRight, Circle, Users, Crown, ClipboardList, MessageSquare,
 } from 'lucide-react';
 import { api, CourseDetail as CD, LessonNode, naira, pctOff, shareOrCopy } from '../api';
 import { CourseThumb, ProgressBar, Spinner, Wordmark, Avatar } from '../components/ui';
@@ -105,6 +105,7 @@ export default function CourseDetail() {
               </div>
             ))}
           </div>
+          <button onClick={() => nav(`/team/${course.myGroup!.id}`)} className="btn-primary w-full mt-3 py-2.5 text-sm"><MessageSquare size={16} /> Open team chat</button>
         </div>
       )}
 

@@ -44,6 +44,8 @@ import CourseComplete from './screens/CourseComplete';
 import Achievements from './screens/Achievements';
 import Certificate from './screens/Certificate';
 import Community from './screens/Community';
+import TeamChat from './screens/TeamChat';
+import Messages from './screens/Messages';
 
 // Centered app panel. On phones it's full-screen (with safe-area insets); on
 // laptops/desktop it's a comfortable centered column. `wide` is used for the
@@ -223,6 +225,9 @@ export default function App() {
         <Route path="/learn/:slug/quiz/:lessonId/results" element={<QuizResults />} />
         <Route path="/certificate/:slug" element={<Certificate />} />
         <Route path="/achievements" element={<Achievements />} />
+        <Route path="/team/:groupId" element={<TeamChat />} />
+        <Route path="/messages" element={<Messages />} />
+        <Route path="/messages/:userId" element={<Messages />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

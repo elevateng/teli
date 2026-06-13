@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Mail, GraduationCap, Award, CheckCircle2, XCircle, CreditCard } from 'lucide-react';
+import { Mail, GraduationCap, Award, CheckCircle2, XCircle, CreditCard, MessageSquare } from 'lucide-react';
 import { api, LearnerDetail, naira } from '../../api';
 import { TopBar, CourseThumb, ProgressBar, Spinner } from '../../components/ui';
 
@@ -15,7 +15,8 @@ export default function AdminLearnerDetail() {
 
   return (
     <div className="flex flex-col min-h-full">
-      <TopBar title={u.fullName} subtitle={u.role} onBack={() => nav('/admin/users')} />
+      <TopBar title={u.fullName} subtitle={u.role} onBack={() => nav('/admin/users')}
+        right={<button onClick={() => nav(`/messages/${u.id}`)} className="flex items-center gap-1.5 text-brand font-bold text-sm"><MessageSquare size={18} /> Message</button>} />
       <div className="px-5 py-5 space-y-6">
         <div className="card p-5 flex items-center gap-4">
           <div className="w-14 h-14 rounded-full bg-navy/10 text-navy flex items-center justify-center text-2xl font-extrabold">{u.fullName.charAt(0)}</div>
