@@ -205,13 +205,38 @@ async function courseProgress(userId, courseId) {
 }
 
 async function award(userId, code, title, detail, icon) {
+  const existing = await db.prepare('SELECT 1 FROM achievements WHERE user_id = ? AND code = ?').get(userId, code);
+  if (existing) return false;
   try {
     await db.prepare('INSERT INTO achievements (user_id,code,title,detail,icon) VALUES (?,?,?,?,?)')
       .run(userId, code, title, detail, icon);
-  } catch { /* already earned */ }
+    await notify(userId, 'achievement', `New badge unlocked: ${title} 🏅`, detail, '/achievements');
+    return true;
+  } catch { return false; }
 }
 async function addPoints(userId, pts) {
   await db.prepare('UPDATE users SET points = points + ? WHERE id = ?').run(pts, userId);
+  const total = (await db.prepare('SELECT points FROM users WHERE id = ?').get(userId))?.points || 0;
+  // points milestone badges
+  if (total >= 500) await award(userId, 'points-500', 'Rising Star', 'Earned 500 points', 'star');
+  if (total >= 1000) await award(userId, 'points-1000', 'Learning Legend', 'Earned 1,000 points', 'medal');
+  if (total >= 2500) await award(userId, 'points-2500', 'TELI Champion', 'Earned 2,500 points', 'trophy');
+}
+
+// Update the learner's daily learning streak; award streak badges. Call on any
+// real learning activity (lesson complete, quiz). Idempotent per calendar day.
+async function touchStreak(userId) {
+  const u = await db.prepare('SELECT streak_days, last_active FROM users WHERE id = ?').get(userId);
+  const today = new Date().toISOString().slice(0, 10);
+  if (u?.last_active === today) return u.streak_days; // already counted today
+  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const streak = u?.last_active === yesterday ? (u.streak_days || 0) + 1 : 1;
+  await db.prepare('UPDATE users SET streak_days = ?, last_active = ? WHERE id = ?').run(streak, today, userId);
+  if (streak >= 3) await award(userId, 'streak-3', 'On a Roll', '3-day learning streak', 'flame');
+  if (streak >= 7) await award(userId, 'streak-7', 'Week Warrior', '7-day learning streak', 'flame');
+  if (streak >= 14) await award(userId, 'streak-14', 'Committed', '14-day learning streak', 'flame');
+  if (streak >= 30) await award(userId, 'streak-30', 'Unbreakable', '30-day learning streak', 'flame');
+  return streak;
 }
 
 // Award milestone badges based on how many lessons the learner has completed.
@@ -588,6 +613,7 @@ app.post('/api/lessons/:id/complete', authOptional, authRequired, ah(async (req,
   `).run(req.user.id, lesson.course_id);
   await evaluateCourseCompletion(req.user.id, lesson.course_id);
   await awardLessonMilestones(req.user.id);
+  await touchStreak(req.user.id);
   const cert = await db.prepare('SELECT 1 FROM certificates WHERE user_id = ? AND course_id = ?').get(req.user.id, lesson.course_id);
   const course = await db.prepare('SELECT slug FROM courses WHERE id = ?').get(lesson.course_id);
   res.json({ progress: await courseProgress(req.user.id, lesson.course_id), certificate: !!cert, courseSlug: course?.slug });
@@ -614,6 +640,7 @@ app.post('/api/lessons/:id/quiz', authOptional, authRequired, ah(async (req, res
 
   await db.prepare('INSERT INTO quiz_attempts (user_id,lesson_id,score,total,passed,time_taken,answers) VALUES (?,?,?,?,?,?,?)')
     .run(req.user.id, lesson.id, score, total, passed ? 1 : 0, timeTaken, JSON.stringify(answers));
+  await touchStreak(req.user.id);
 
   if (passed) {
     await db.prepare(`

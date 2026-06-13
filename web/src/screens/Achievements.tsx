@@ -23,6 +23,15 @@ const ALL_BADGES = [
   { icon: 'pen', title: 'Reviewer', detail: 'Leave a course review', bg: 'bg-cyan-600' },
   { icon: 'message', title: 'Community Voice', detail: 'Post in a community', bg: 'bg-sky-500' },
   { icon: 'feather', title: 'Go-Getter', detail: 'Submit an assignment', bg: 'bg-teal-600' },
+  // streaks
+  { icon: 'flame', title: 'On a Roll', detail: '3-day learning streak', bg: 'bg-orange-500' },
+  { icon: 'flame', title: 'Week Warrior', detail: '7-day learning streak', bg: 'bg-orange-600' },
+  { icon: 'flame', title: 'Committed', detail: '14-day learning streak', bg: 'bg-red-500' },
+  { icon: 'flame', title: 'Unbreakable', detail: '30-day learning streak', bg: 'bg-red-600' },
+  // points milestones
+  { icon: 'star', title: 'Rising Star', detail: 'Earn 500 points', bg: 'bg-amber-400' },
+  { icon: 'medal', title: 'Learning Legend', detail: 'Earn 1,000 points', bg: 'bg-violet-600' },
+  { icon: 'trophy', title: 'TELI Champion', detail: 'Earn 2,500 points', bg: 'bg-amber-600' },
 ];
 
 export default function Achievements() {

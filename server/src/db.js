@@ -336,6 +336,7 @@ CREATE TABLE IF NOT EXISTS submissions (
   await addColumn('users', 'must_change_password', 'must_change_password INTEGER NOT NULL DEFAULT 0');
   await addColumn('users', 'referral_points', 'referral_points INTEGER NOT NULL DEFAULT 0');
   await addColumn('users', 'referred_by', 'referred_by INTEGER'); // referrer user id
+  await addColumn('users', 'last_active', 'last_active TEXT'); // YYYY-MM-DD of last learning activity (streaks)
   await addColumn('courses', 'visibility', "visibility TEXT NOT NULL DEFAULT 'public'"); // public | private
   await addColumn('courses', 'created_by', 'created_by INTEGER'); // owner (admin who created it)
   await addColumn('courses', 'image', 'image TEXT'); // course photo (data URL)
