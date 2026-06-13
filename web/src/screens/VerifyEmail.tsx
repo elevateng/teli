@@ -7,7 +7,7 @@ import { useAuth, homeForRole } from '../auth';
 
 export default function VerifyEmail() {
   const nav = useNavigate();
-  const { user, loading, setUser, logout } = useAuth();
+  const { user, loading, setUser, refresh, logout } = useAuth();
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -39,8 +39,11 @@ export default function VerifyEmail() {
 
   const resend = async () => {
     setError(''); setResent('');
-    try { await api.post('/auth/resend-verification'); setResent('A new code is on its way.'); setCooldown(45); }
-    catch (err: any) { setError(err.message); }
+    try {
+      const r = await api.post<{ ok: boolean; verified?: boolean }>('/auth/resend-verification');
+      if (r.verified) { await refresh(); return; } // email couldn't be sent → auto-verified
+      setResent('A new code is on its way.'); setCooldown(45);
+    } catch (err: any) { setError(err.message); }
   };
 
   return (

@@ -64,12 +64,12 @@ const gen6 = () => String(Math.floor(100000 + Math.random() * 900000));
 async function sendVerification(user) {
   const code = gen6();
   await db.prepare("UPDATE users SET verify_code = ?, verify_expires = datetime('now','+30 minutes') WHERE id = ?").run(code, user.id);
-  sendMail({
+  const rec = await sendMail({
     to: user.email, subject: `Your TELI verification code: ${code}`, title: 'Verify your email',
     html: `<p>Hi ${firstName(user.full_name)},</p><p>Welcome to TELI! Use this code to verify your email address:</p>
       <p style="font-size:30px;font-weight:800;letter-spacing:8px;color:#0F2147;background:#f3f4f6;display:inline-block;padding:12px 22px;border-radius:10px">${code}</p>
       <p style="color:#5b6577;font-size:13px">This code expires in 30 minutes. If you didn’t create a TELI account, you can ignore this email.</p>` });
-  return code;
+  return rec; // { delivered, error?, ... }
 }
 
 async function sendWelcome(user) {
@@ -377,10 +377,19 @@ app.post('/api/auth/register', ah(async (req, res) => {
   const verified = emailEnabled ? 0 : 1;
   const info = await db.prepare('INSERT INTO users (full_name,email,password,email_verified) VALUES (?,?,?,?)')
     .run(fullName, String(email).toLowerCase(), hash, verified);
-  const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid);
+  let user = await db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid);
   await applyReferral(req.body?.ref, user);
-  if (emailEnabled) await sendVerification(user);
-  else await sendWelcome(user); // no email gateway → skip verification, welcome straight away
+  if (emailEnabled) {
+    const rec = await sendVerification(user);
+    if (!rec?.delivered) {
+      // The code couldn't actually be sent — don't trap the user: verify + welcome.
+      await db.prepare('UPDATE users SET email_verified = 1, verify_code = NULL, verify_expires = NULL WHERE id = ?').run(user.id);
+      await sendWelcome(user);
+      user = await db.prepare('SELECT * FROM users WHERE id = ?').get(user.id);
+    }
+  } else {
+    await sendWelcome(user); // no email gateway → skip verification, welcome straight away
+  }
   res.json({ token: sign(user), user: publicUser(user) });
 }));
 
@@ -401,8 +410,14 @@ app.post('/api/auth/verify-email', authOptional, authRequired, ah(async (req, re
 // resend a fresh verification code
 app.post('/api/auth/resend-verification', authOptional, authRequired, ah(async (req, res) => {
   const u = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
-  if (u.email_verified) return res.json({ ok: true });
-  await sendVerification(u);
+  if (u.email_verified) return res.json({ ok: true, verified: true });
+  const rec = await sendVerification(u);
+  if (!rec?.delivered) {
+    // can't deliver a code → don't keep them stuck: verify them and welcome.
+    await db.prepare('UPDATE users SET email_verified = 1, verify_code = NULL, verify_expires = NULL WHERE id = ?').run(u.id);
+    await sendWelcome(u);
+    return res.json({ ok: true, verified: true });
+  }
   res.json({ ok: true });
 }));
 
